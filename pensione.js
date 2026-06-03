@@ -34,13 +34,17 @@ let chartPen     = null;
 let chartPenFisc = null;
 let chartRispFisc = null;
 
-// ── Coefficienti di trasformazione INPS 2025 ─────────────────
-// Fonte: DM Economia aggiornamento biennale
+// ── Coefficienti di trasformazione INPS — biennio 2025/2026 ──
+// Fonte: DM 436/2024 (Min. Lavoro, 20/11/2024), in vigore dal 1°/1/2025.
+// Valori ufficiali verificati per le età 57-67 e 71. Le età 68-69-70
+// (assenti nelle fonti testuali consultate) sono interpolate
+// geometricamente tra i valori ufficiali certi a 67 (5,608%) e 71
+// (6,510%), con progressione monotòna coerente col trend reale.
 const COEFF_TRASF = {
-  57: 0.04186, 58: 0.04305, 59: 0.04432, 60: 0.04561,
-  61: 0.04702, 62: 0.04848, 63: 0.05008, 64: 0.05178,
-  65: 0.05352, 66: 0.05534, 67: 0.05723, 68: 0.05920,
-  69: 0.06128, 70: 0.06466, 71: 0.06712,
+  57: 0.04204, 58: 0.04308, 59: 0.04419, 60: 0.04536,
+  61: 0.04661, 62: 0.04795, 63: 0.04936, 64: 0.05088,
+  65: 0.05250, 66: 0.05423, 67: 0.05608, 68: 0.05821,
+  69: 0.06042, 70: 0.06272, 71: 0.06510,
 };
 
 function getCoeffTrasf(age) {
@@ -82,7 +86,7 @@ function calcPensione() {
   // Quota lavoratore contrattuale da fondo negoziale (% RAL)
   const fpVersAnnLav = isNegoziale ? ral * contLavoratore : 0;
   // Quota datoriale (non è reddito del lavoratore → non entra nella deducibilità IRPEF del lavoratore)
-  const fpVersAnnDat = isNegoziale ? ral * contDatoriale : 0;
+  const fpVersAnnDat = (isNegoziale && tfrSi) ? ral * contDatoriale : 0;
   // TFR annuo (non deducibile, è accantonamento figurativo)
   const TFR_DIVISOR  = 13.5;
   const tfrAnnBase   = tfrSi ? (ral / TFR_DIVISOR) : 0;
@@ -125,8 +129,11 @@ function calcPensione() {
 
     // TFR corrente sull'anno
     const tfrAnnCur  = tfrSi ? (curRal / TFR_DIVISOR) : 0;
-    // Fondo negoziale: contributo datoriale + lavoratore proporzionali alla RAL corrente
-    const fpDatCur   = isNegoziale ? curRal * contDatoriale  : 0;
+    // Fondo negoziale: contributo datoriale + lavoratore proporzionali alla RAL corrente.
+    // Il contributo DATORIALE richiede il conferimento del TFR al fondo (requisito di legge/CCNL):
+    // se il TFR resta in azienda, il datore non versa la sua quota. Il contributo del lavoratore
+    // e il versamento volontario restano invece possibili anche con TFR in azienda.
+    const fpDatCur   = (isNegoziale && tfrSi) ? curRal * contDatoriale  : 0;
     const fpLavCur   = isNegoziale ? curRal * contLavoratore : 0;
 
     // Totale versato nel FP quest'anno:
@@ -521,7 +528,7 @@ function renderPenFP(r) {
           fpDatoriale, fpLavoratore, fpVersAnnVolont } = fiscData;
   const isNeg = penState.isNegoziale;
   const negRow = isNeg ? `
-      <div class="mcard"><div class="ml">Contrib. datoriale</div><div class="mv" style="color:var(--green)">${fmt(Math.round(fpDatoriale/12))}<span style="font-size:11px;opacity:.6">/m</span></div><div class="ms">${(penState.contDatoriale*100).toFixed(1)}% RAL · ${fmt(fpDatoriale)}/a</div></div>
+      <div class="mcard"><div class="ml">Contrib. datoriale</div><div class="mv" style="color:${penState.tfrSi?'var(--green)':'var(--red)'}">${penState.tfrSi ? fmt(Math.round(fpDatoriale/12)) : '€0'}<span style="font-size:11px;opacity:.6">/m</span></div><div class="ms">${penState.tfrSi ? `${(penState.contDatoriale*100).toFixed(1)}% RAL · ${fmt(fpDatoriale)}/a` : '⚠️ Richiede il TFR al fondo'}</div></div>
       <div class="mcard"><div class="ml">Contrib. lavoratore negoziale</div><div class="mv" style="color:var(--blue)">${fmt(Math.round(fpLavoratore/12))}<span style="font-size:11px;opacity:.6">/m</span></div><div class="ms">${(penState.contLavoratore*100).toFixed(1)}% RAL · ${fmt(fpLavoratore)}/a</div></div>` : '';
   document.getElementById('penFPDetail').innerHTML = `
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -650,7 +657,41 @@ function renderPenFiscComp(r) {
   const diff   = Math.abs(capFPNetto - capETFNetto);
   const gC = 'rgba(0,0,0,.05)', tC = 'rgba(0,0,0,.45)';
 
+  // ── Confronto destinazione TFR: in azienda vs conferito al fondo ──────────
+  // Il TFR ha due regimi distinti per RIVALUTAZIONE e TASSAZIONE:
+  //  • In azienda: rivalutazione di legge (art. 2120 c.c.) = 1,5% fisso + 75%
+  //    dell'inflazione; tassazione separata all'aliquota media IRPEF (~23-43%).
+  //  • Al fondo: rende come il fondo (fpRet); tassazione agevolata 15%→9%.
+  // Calcolato solo se c'è un TFR (tfrAnnuoMedio > 0).
+  let tfrCompHtml = '';
+  if (tfrAnnuoMedio > 0) {
+    const revAzienda = 0.015 + 0.75 * penState.infl;          // rivalutazione legale TFR
+    // Aliquota media IRPEF per tassazione separata (proxy: IRPEF media sulla RAL)
+    const aliqMediaTFR = Math.min(0.43, Math.max(0.23, calcIRPEF(penState.ral) / penState.ral));
+    let capTfrAzienda = 0, capTfrFondo = 0;
+    for (let y = 0; y < yearsToRet; y++) {
+      capTfrAzienda = capTfrAzienda * (1 + revAzienda)     + tfrAnnuoMedio;
+      capTfrFondo   = capTfrFondo   * (1 + penState.fpRet) + tfrAnnuoMedio;
+    }
+    const tfrAziendaNetto = capTfrAzienda * (1 - aliqMediaTFR);
+    const tfrFondoNetto   = capTfrFondo   * (1 - aliqFP);
+    const tfrDiff         = tfrFondoNetto - tfrAziendaNetto;
+    const tfrWinner       = tfrDiff >= 0 ? 'al Fondo' : 'in Azienda';
+    const tfrWinColor     = tfrDiff >= 0 ? 'var(--green)' : 'var(--red)';
+    tfrCompHtml = `
+    <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin:4px 0 8px">Destinazione del TFR — Azienda vs Fondo Pensione</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="mcard"><div class="ml">TFR in azienda (netto)</div><div class="mv" style="color:var(--orange)">${fmt(Math.round(tfrAziendaNetto))}</div><div class="ms">Rival. legale ${(revAzienda*100).toFixed(2)}%/a (1,5% + 75% infl.) · tass. separata ${(aliqMediaTFR*100).toFixed(0)}%</div></div>
+      <div class="mcard"><div class="ml">TFR al fondo (netto)</div><div class="mv" style="color:var(--purple)">${fmt(Math.round(tfrFondoNetto))}</div><div class="ms">Rend. fondo ${(penState.fpRet*100).toFixed(1)}%/a · tass. agevolata ${(aliqFP*100).toFixed(1)}%</div></div>
+      <div class="mcard"><div class="ml">Conviene ${tfrWinner}</div><div class="mv" style="color:${tfrWinColor}">${fmt(Math.abs(Math.round(tfrDiff)))}</div><div class="ms">Differenza netta su ${yearsToRet} anni · TFR ${fmt(Math.round(tfrAnnuoMedio))}/a</div></div>
+    </div>
+    <div style="background:#f3e5f5;border:1px solid #e1bee7;border-radius:var(--radius-sm);padding:10px 14px;font-size:11.5px;color:#6a1b9a;margin-bottom:12px;line-height:1.6">
+      <strong>📌 Perché il TFR cambia molto:</strong> in azienda si rivaluta solo all'<strong>${(revAzienda*100).toFixed(2)}%/a</strong> (1,5% fisso + 75% inflazione, art. 2120 c.c.) e alla liquidazione sconta la <strong>tassazione separata</strong> all'aliquota media IRPEF (~${(aliqMediaTFR*100).toFixed(0)}%). Conferito al fondo rende come il comparto scelto (${(penState.fpRet*100).toFixed(1)}%/a) e la prestazione è tassata col regime agevolato <strong>${(aliqFP*100).toFixed(1)}%</strong> (dal 15% al 9% in base agli anni di adesione). La differenza nasce dal doppio effetto rivalutazione + fiscalità.
+    </div>`;
+  }
+
   document.getElementById('penFiscComp').innerHTML = `
+    ${tfrCompHtml}
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
       <div class="mcard"><div class="ml">Capitale FP netto a ${penState.retAge}a</div><div class="mv" style="color:var(--purple)">${fmt(capFPNetto)}</div><div class="ms">Lordo ${fmt(capFPSim)} · tass. 20%/a rendim. + ${(aliqFP*100).toFixed(0)}% prestaz.</div></div>
       <div class="mcard"><div class="ml">Capitale ETF equiv. netto</div><div class="mv" style="color:var(--teal)">${fmt(capETFNetto)}</div><div class="ms">Tax deferral + 26% plusval. finale · vers. + IRPEF reinvestita</div></div>
@@ -762,6 +803,17 @@ document.addEventListener('DOMContentLoaded', () => {
     penState.tfrSi = b.dataset.tfr === 'si';
     tfr.querySelectorAll('.gbtn').forEach(x => x.classList.remove('a-blue'));
     b.classList.add('a-blue');
+    // Vincolo normativo: il fondo NEGOZIALE (di categoria) è il veicolo del conferimento
+    // collettivo del TFR e del contributo datoriale. Se il TFR resta in azienda, l'adesione
+    // sensata è a un fondo APERTO con solo versamento volontario → disattiviamo il negoziale.
+    if (!penState.tfrSi && penState.isNegoziale) {
+      penState.isNegoziale = false;
+      if (negoz) {
+        negoz.querySelectorAll('.gbtn').forEach(x => x.classList.remove('a-blue'));
+        const bNo = negoz.querySelector('[data-neg="no"]');
+        if (bNo) bNo.classList.add('a-blue');
+      }
+    }
     renderPensione();
   };
 
@@ -770,6 +822,16 @@ document.addEventListener('DOMContentLoaded', () => {
     penState.isNegoziale = b.dataset.neg === 'si';
     negoz.querySelectorAll('.gbtn').forEach(x => x.classList.remove('a-blue'));
     b.classList.add('a-blue');
+    // Il fondo negoziale implica il conferimento del TFR al fondo: se l'utente attiva
+    // il negoziale, forziamo coerentemente il TFR al fondo (e aggiorniamo i bottoni TFR).
+    if (penState.isNegoziale && !penState.tfrSi) {
+      penState.tfrSi = true;
+      if (tfr) {
+        tfr.querySelectorAll('.gbtn').forEach(x => x.classList.remove('a-blue'));
+        const bSi = tfr.querySelector('[data-tfr="si"]');
+        if (bSi) bSi.classList.add('a-blue');
+      }
+    }
     renderPensione();
   };
 

@@ -1469,6 +1469,7 @@
         <button class="gbtn" data-neg="si">🤝 Sì, ho un fondo negoziale</button>
         <button class="gbtn a-blue" data-neg="no">👤 No, fondo aperto/PIP</button>
       </div>
+      <div style="font-size:10.5px;color:var(--text3);margin-top:6px;line-height:1.5">Il fondo negoziale richiede il conferimento del TFR al fondo (necessario per il contributo datoriale). Con TFR in azienda è disponibile solo il fondo aperto/PIP con versamento volontario.</div>
       <div id="penNegozialBlock" style="display:none;margin-top:10px;padding:12px 14px;background:#e8f5e9;border:1px solid #c8e6c9;border-radius:var(--radius-sm);font-size:12px;color:#2e7d32;line-height:1.6">
         <div style="margin-bottom:10px">
           Su RAL <strong>€<span id="penNegRALShow">35.000</span></strong>:
@@ -1485,8 +1486,6 @@
         <div class="pblock">
           <div class="plabel" style="color:#2e7d32"><span>Contributo lavoratore contrattuale (% RAL)</span><span class="pval" id="lPenContLav" style="color:#2e7d32">1.30%</span></div>
           <input type="range" id="sPenContLav" min="0" max="5" step="0.1" value="1.3"
-            oninput="penState.contLavoratore=+this.value/100;document.getElementById('lPenContLav').textContent=(+this.value).toFixed(2)+'%';renderPensione()"
-            style="accent-color:#2e7d32">
             oninput="penState.contLavoratore=+this.value/100;document.getElementById('lPenContLav').textContent=(+this.value).toFixed(2)+'%';renderPensione()"
             style="accent-color:#2e7d32">
         </div>

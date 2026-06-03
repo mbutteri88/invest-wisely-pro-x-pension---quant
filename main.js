@@ -30,18 +30,18 @@ const PORT = {
   eq100: {
     label: '100% Azioni',
     desc: 'Portafoglio interamente azionario Massimo rendimento atteso, massima volatilità. Adatto a orizzonti ≥15 anni con alta tolleranza alle perdite temporanee.',
-    best: .102, normal: .070, worst: .009, vol: .160,
+    best: .102, normal: .070, worst: .007, vol: .160,
     eq: 1.0, ob: 0.0, gold: 0.0, cash: 0.0,
     realRet: .050, inflBeta: 0.3, fxExp: 0.85,  // ~85% non-EUR (MSCI World: 65% USA + altri)
   },
   eq80: {
     label: '80/20 Az/Ob', desc: '80% azioni, 20% obbligazioni. Portafoglio aggressivo con lieve ammortizzatore obbligazionario.',
-    best: .091, normal: .065, worst: .016, vol: .130,
+    best: .091, normal: .065, worst: .013, vol: .130,
     eq: .8, ob: .2, gold: 0, cash: 0, realRet: .045, inflBeta: 0.2, fxExp: 0.70,
   },
   eq60: {
     label: '60/40 Az/Ob', desc: '60/40 classico — il portafoglio bilanciato per eccellenza. Riduce la volatilità rispetto al 100% azioni mantenendo rendimenti solidi nel lungo periodo.',
-    best: .074, normal: .055, worst: .019, vol: .095,
+    best: .074, normal: .055, worst: .016, vol: .095,
     eq: .6, ob: .4, gold: 0, cash: 0, realRet: .037, inflBeta: 0.05, fxExp: 0.55,
   },
   eq50: {
@@ -192,9 +192,9 @@ const ASSET_CLASSES = {
   // ══════════════════════════════════════════════════════════════
   eq_sviluppati: {
     label: 'Azioni Mercati Sviluppati', emoji: '🌍', cat: 'eq', isEq: true,
-    mu: 0.070, vol: 0.158, inflBeta: 0.30, ter: 0.2, fxExp: 0.85,
+    mu: 0.067, vol: 0.158, inflBeta: 0.30, ter: 0.2, fxExp: 0.85,
     histCAGR: 0.102, histPeriod: '1970-2024', src: 'DMS Yearbook 2024',
-    desc: 'Paniere di azioni di paesi sviluppati con composizione geografica ampia (America del Nord, Europa, Pacifico). CAGR storico 10.2%/a. Rendimento atteso forward-looking ~7.0%/a, più conservativo per effetto della mean-reversion delle valutazioni (CAPE elevati nel 2024).',
+    desc: 'Paniere di azioni di paesi sviluppati con composizione geografica ampia (America del Nord, Europa, Pacifico). CAGR storico 10.2%/a. Rendimento atteso forward-looking ~6.7%/a, più conservativo per effetto della mean-reversion delle valutazioni (CAPE elevati nel 2024) e coerente con la media pesata dei componenti (~65-70% USA + Europa + Pacifico).',
   },
   eq_usa: {
     label: 'Azioni USA Large Cap', emoji: '🇺🇸', cat: 'eq', isEq: true,
@@ -416,7 +416,7 @@ const ASSET_CLASSES = {
   },
   cash: {
     label: 'Liquidità / Mercato Monetario', emoji: '💵', cat: 'cash', isCash: true,
-    mu: 0.028, vol: 0.020, inflBeta: 0.15, ter: 0.05, fxExp: 0.0,
+    mu: 0.025, vol: 0.020, inflBeta: 0.15, ter: 0.05, fxExp: 0.0,
     histCAGR: 0.048, histPeriod: '1970-2024', src: 'Dati storici tassi breve termine (Fed/BCE)',
     desc: 'BOT, T-Bills, fondi monetari, conti deposito. Rendimento = tasso di policy della banca centrale. Volatilità ~2% (include rischio di reinvestimento/variazione tassi: il rendimento atteso cambia ad ogni rinnovo). Rendimento reale spesso negativo in periodi inflattivi. CAGR storico 4.8%/a gonfiato dall\'era dei tassi alti anni \'80. Forward-looking normalizzato ~2.5%/a.',
   },
