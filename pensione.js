@@ -28,6 +28,7 @@ let penState = {
   rispFiscDest:     'reinvesti_fp', // 'spendi' | 'reinvesti_fp' | 'reinvesti_etf'
   // Dati ETF ereditati dal Simulatore (aggiornati su importa)
   etfCapital: 0,       // capitale ETF stimato al pensionamento
+  etfRet:     0.05,    // rendimento annuo NETTO del portafoglio del Simulatore (default ~bilanciato; aggiornato su importa)
 };
 
 let chartPen     = null;
@@ -119,6 +120,9 @@ function calcPensione() {
   let cumMontante  = montanteIniziale;
   let capFP        = 0;
   let capETFBonus  = 0;   // capital accumulato dal risparmio fiscale reinvestito in ETF
+  let capETFBonusVers = 0; // base di costo (somma dei versamenti) per il capital gain
+  let capTfrAz     = 0;   // TFR lasciato in azienda: liquidazione separata (rivalutaz. di legge)
+  const revAzienda = 0.015 + 0.75 * infl; // rivalutazione TFR di legge (art. 2120 c.c.)
   const rateCapIT  = pil + infl;
 
   const accData = [];
@@ -129,6 +133,11 @@ function calcPensione() {
 
     // TFR corrente sull'anno
     const tfrAnnCur  = tfrSi ? (curRal / TFR_DIVISOR) : 0;
+    // Se il TFR resta in azienda, si accumula come liquidazione separata, rivalutata
+    // per legge (1,5% + 75% inflazione). Verrà tassato separatamente al riscatto.
+    if (!tfrSi) {
+      capTfrAz = capTfrAz * (1 + revAzienda) + (curRal / TFR_DIVISOR);
+    }
     // Fondo negoziale: contributo datoriale + lavoratore proporzionali alla RAL corrente.
     // Il contributo DATORIALE richiede il conferimento del TFR al fondo (requisito di legge/CCNL):
     // se il TFR resta in azienda, il datore non versa la sua quota. Il contributo del lavoratore
@@ -145,9 +154,13 @@ function calcPensione() {
     // (a differenza del portafoglio ETF ad accumulazione dove la tassazione è differita)
     capFP = capFP * (1 + fpRet * 0.80) + fpAnn;
 
-    // ETF bonus da risparmio fiscale reinvestito nel portafoglio (rendimento pieno, tassazione differita)
+    // ETF bonus da risparmio fiscale reinvestito nel portafoglio del Simulatore.
+    // Cresce al rendimento NETTO del portafoglio scelto (etfRet), con tassazione
+    // del capital gain DIFFERITA al riscatto (a differenza del FP, tassato lungo il
+    // percorso al 20%). La tassa sulla plusvalenza viene applicata più sotto, al riscatto.
     if (extraETF > 0) {
-      capETFBonus = capETFBonus * (1 + fpRet) + extraETF;
+      capETFBonus = capETFBonus * (1 + penState.etfRet) + extraETF;
+      capETFBonusVers += extraETF;
     }
 
     accData.push({
@@ -202,7 +215,18 @@ function calcPensione() {
   const rendFPMens     = rendFPNetta / 12;
 
   // ── 5. ETF portafoglio (da Simulatore + bonus risparmio fiscale) ──
-  const etfCap         = penState.etfCapital + capETFBonus;
+  // L'ETF bonus sconta la tassazione del capital gain (26%) DIFFERITA al riscatto,
+  // solo sulla plusvalenza (capitale meno base di costo) — a differenza del FP,
+  // già tassato al 20% lungo il percorso.
+  const capETFBonusGain = Math.max(0, capETFBonus - capETFBonusVers);
+  const capETFBonusNetto = capETFBonusVers + capETFBonusGain * (1 - 0.26);
+
+  // TFR lasciato in azienda: liquidazione separata netta (tassazione separata
+  // all'aliquota media IRPEF, proxy clampata 23-43%). Mostrato come VOCE SEPARATA
+  // (è un incasso una tantum, non un capitale a rendita), non sommato all'ETF.
+  const aliqSepTFR     = Math.min(0.43, Math.max(0.23, aliqMargIRPEF));
+  const capTfrAzNetto  = capTfrAz * (1 - aliqSepTFR);
+  const etfCap         = penState.etfCapital + capETFBonusNetto;
   const swr            = 0.04;
   const etfPrelievoAnn = etfCap * swr;
   const etfPrelievoMens = etfPrelievoAnn / 12;
@@ -259,6 +283,7 @@ function calcPensione() {
     etfPrelievoMens:   Math.round(etfPrelievoMens),
     etfCap:            Math.round(etfCap),
     capETFBonus:       Math.round(capETFBonus),
+    capTfrAzNetto:     Math.round(capTfrAzNetto),
     yearsToRet, yearsInPen,
     dec0: decData[0] ?? null,
   };
@@ -317,6 +342,12 @@ function importPenFromSim() {
     const dSim = project('normal', false);
     capStimato = dSim[Math.min(yearsToRet, dSim.length - 1)]?.value ?? 0;
     penState.etfCapital = capStimato;
+    // Rendimento NETTO del portafoglio scelto nel Simulatore (per il reinvestimento del risparmio fiscale in ETF)
+    if (typeof getRate === 'function') {
+      const terRate = (typeof state.ter === 'number' ? state.ter : 0) / 100;
+      const rNet = getRate(state.portfolio, 'normal', 0, state.age) - terRate;
+      if (isFinite(rNet) && rNet > 0) penState.etfRet = rNet;
+    }
   } catch(e) { penState.etfCapital = 0; }
   const slAge = document.getElementById('sPenAge');
   if (slAge) { slAge.value = penState.age; document.getElementById('lPenAge').textContent = penState.age; }
@@ -371,7 +402,7 @@ function renderPensione() {
 
 // ── KPI Cards ────────────────────────────────────────────────
 function renderPenKPI(r) {
-  const { pensioneNettaMens, rendFPMens, etfPrelievoMens, dec0, yearsToRet, tassoSost, cumMontante, capFP, etfCap, coeffTrasf } = r;
+  const { pensioneNettaMens, rendFPMens, etfPrelievoMens, dec0, yearsToRet, tassoSost, cumMontante, capFP, etfCap, coeffTrasf, capTfrAzNetto } = r;
   const deflaz     = Math.pow(1 + penState.infl, yearsToRet);
   const toReal     = v => v / deflaz;
   const fabb       = dec0?.fabbisognoMens ?? (penState.desired * deflaz);
@@ -398,6 +429,12 @@ function renderPenKPI(r) {
       <div class="mv" style="color:var(--teal)">${fmt(etfPrelievoMens)}<span style="font-size:11px;opacity:.6">/m</span></div>
       <div class="ms">≈ ${fmt(etfReal)}/m in € di oggi · cap. ${fmt(etfCap)} · SWR 4%</div>
     </div>
+    ${capTfrAzNetto > 0 ? `
+    <div class="mcard">
+      <div class="ml">TFR liquidazione (azienda)</div>
+      <div class="mv" style="color:var(--orange)">${fmt(capTfrAzNetto)}</div>
+      <div class="ms">Incasso una tantum al pensionamento · ≈ ${fmt(Math.round(toReal(capTfrAzNetto)))} in € di oggi · netto tassazione separata</div>
+    </div>` : ''}
     <div class="mcard">
       <div class="ml">Totale disponibile</div>
       <div class="mv" style="color:${copertoPct>=100?'var(--green)':'var(--orange)'}">${fmt(totMens)}<span style="font-size:11px;opacity:.6">/m</span></div>
@@ -561,9 +598,10 @@ function renderPenRispFisc(r) {
   let capReinvFP  = 0;
   let capReinvETF = 0;
   const fpRet = penState.fpRet;
+  const etfRet = penState.etfRet;
   for (let y = 0; y < yearsToRet; y++) {
-    capReinvFP  = capReinvFP  * (1 + fpRet * 0.80) + risparmioFisc; // 20% tassa rendimenti FP
-    capReinvETF = capReinvETF * (1 + fpRet)         + risparmioFisc; // ETF: tax deferral
+    capReinvFP  = capReinvFP  * (1 + fpRet * 0.80) + risparmioFisc; // FP: 20% tassa sui rendimenti, lungo il percorso
+    capReinvETF = capReinvETF * (1 + etfRet)        + risparmioFisc; // ETF: rendimento del portafoglio, tassazione differita
   }
   // ETF netto alla vendita finale
   const costBaseETF  = risparmioFisc * yearsToRet;
