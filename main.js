@@ -736,7 +736,7 @@ function calcCustomParams() {
   const total = slots.reduce((s, sl) => s + sl.pct, 0) || 1;
 
   // ── 2. Rendimento atteso ponderato e beta inflazione ──────────
-  let mu = 0, inflBeta = 0, eqW = 0, obW = 0, goldW = 0, cashW = 0, terW = 0, fxExpW = 0;
+  let mu = 0, inflBeta = 0, eqW = 0, obW = 0, goldW = 0, cashW = 0, terW = 0, fxExpW = 0, otherFullW = 0;
   for (const sl of slots) {
     const ac = ASSET_CLASSES[sl.ac];
     if (!ac) continue;
@@ -748,9 +748,10 @@ function calcCustomParams() {
     if (ac.isEq)        eqW   += w;
     else if (ac.isGold) goldW += w;
     else if (ac.isCash) cashW += w;
-    else                obW   += w;
+    else if (ac.cat === 'ob') obW += w;          // vero obbligazionario → aliquota ridotta 12,5%
+    else                otherFullW += w;          // trend/carry/commodities/reit/factor → 26% (redditi diversi)
   }
-  const obW2 = Math.max(0, obW || (1 - eqW - goldW - cashW));
+  const obW2 = Math.max(0, obW || (1 - eqW - goldW - cashW - otherFullW));
 
   // ── 3. Volatilità con matrice di correlazione semplificata ────
   // σ²_p = Σᵢ Σⱼ wᵢ wⱼ σᵢ σⱼ ρᵢⱼ
@@ -811,7 +812,7 @@ function calcCustomParams() {
     volStress: sigmaStressFx,      // vol in regime di crisi (FX vol amplificata)
     volNoFx: sigma,                // vol senza componente FX (riferimento)
     eq:   eqW, ob: obW2, gold: goldW, cash: cashW,
-    goldW, cashW,
+    goldW, cashW, otherFullW,
     realRet:  Math.max(0, muNet - 0.021),
     inflBeta,
     ter:  terW,                    // TER pesato suggerito (ETF tipici)
@@ -998,15 +999,17 @@ function blendedTaxRate(age) {
     const obW    = Math.max(0, cp.ob    ?? 0);
     const goldW  = Math.max(0, cp.goldW ?? 0);
     const cashW  = Math.max(0, cp.cashW ?? 0);
-    // Oro, liquidità, commodities, REITs, fattori → aliquota piena (taxEq, 26%)
+    const otherW = Math.max(0, cp.otherFullW ?? 0);  // trend/carry/commodities/reit/factor
+    // Oro, liquidità, trend following, commodities, REIT, fattori → aliquota piena (taxEq, 26%)
     // Solo la quota obbligazionaria gode dell'aliquota ridotta (taxOb, 12.5% per gov IT/EU)
     // Normalizza per evitare somme > 1 (es. portafogli con leva implicita)
-    const total = eqW + obW + goldW + cashW || 1;
+    const total = eqW + obW + goldW + cashW + otherW || 1;
     return (
-      (eqW   / total) * state.taxEq / 100 +
-      (obW   / total) * state.taxOb / 100 +
-      (goldW / total) * state.taxEq / 100 +
-      (cashW / total) * state.taxEq / 100
+      (eqW    / total) * state.taxEq / 100 +
+      (obW    / total) * state.taxOb / 100 +
+      (goldW  / total) * state.taxEq / 100 +
+      (cashW  / total) * state.taxEq / 100 +
+      (otherW / total) * state.taxEq / 100
     );
   }
   const rawEq = getEquityWeight(state.portfolio, age);
