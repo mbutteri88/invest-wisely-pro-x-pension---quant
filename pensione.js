@@ -81,7 +81,7 @@ function calcPensione() {
   const yearsInPen   = Math.max(0, lifeExp - retAge);
 
   // ── 1. Calcolo deducibilità e risparmio fiscale annuo ─────
-  // Limite deducibilità annua D.Lgs. 252/2005: €5.164,57
+  // Limite deducibilità annua D.Lgs. 252/2005: €5.300,00 (dal 2026; era €5.164,57 fino al 2025)
   // Versamento lavoratore volontario (mensile × 12)
   const fpVersAnnVolont = fpVers * 12;
   // Quota lavoratore contrattuale da fondo negoziale (% RAL)
@@ -92,10 +92,14 @@ function calcPensione() {
   const TFR_DIVISOR  = 13.5;
   const tfrAnnBase   = tfrSi ? (ral / TFR_DIVISOR) : 0;
 
-  // Contributi deducibili = versamento volontario + quota lavoratore contrattuale
-  const deduzMassima   = 5164.57;
-  const deduzLorda     = fpVersAnnVolont + fpVersAnnLav;
-  const deduzEffettiva = Math.min(deduzLorda, deduzMassima);
+  // Contributi deducibili = versamento volontario + quota lavoratore contrattuale.
+  // Il plafond di legge (5.300€/anno dal 2026) è COMPLESSIVO: vi concorre anche il contributo
+  // DATORIALE, che pur non essendo dedotto dal lavoratore erode lo spazio deducibile
+  // disponibile. Il TFR conferito resta invece fuori dal plafond (non deducibile).
+  const deduzMassima      = 5300.00;
+  const plafondResiduo    = Math.max(0, deduzMassima - fpVersAnnDat);
+  const deduzLorda        = fpVersAnnVolont + fpVersAnnLav;
+  const deduzEffettiva    = Math.min(deduzLorda, plafondResiduo);
   const aliqMargIRPEF  = calcAliqMargIRPEF(ral);
   const risparmioFisc  = deduzEffettiva * aliqMargIRPEF; // risparmio IRPEF annuo
 
@@ -122,6 +126,7 @@ function calcPensione() {
   let capETFBonus  = 0;   // capital accumulato dal risparmio fiscale reinvestito in ETF
   let capETFBonusVers = 0; // base di costo (somma dei versamenti) per il capital gain
   let capTfrAz     = 0;   // TFR lasciato in azienda: liquidazione separata (rivalutaz. di legge)
+  let capTfrFp     = 0;   // TFR conferito al fondo: quota di capFP derivante dal solo TFR
   const revAzienda = 0.015 + 0.75 * infl; // rivalutazione TFR di legge (art. 2120 c.c.)
   const rateCapIT  = pil + infl;
 
@@ -153,6 +158,10 @@ function calcPensione() {
     // Implementazione: il rendimento netto è fpRet * (1 - 0.20) = fpRet * 0.80
     // (a differenza del portafoglio ETF ad accumulazione dove la tassazione è differita)
     capFP = capFP * (1 + fpRet * 0.80) + fpAnn;
+    // Quota del capitale FP derivante dal solo TFR conferito (per mostrarne lordo/netto)
+    if (tfrSi) {
+      capTfrFp = capTfrFp * (1 + fpRet * 0.80) + tfrAnnCur;
+    }
 
     // ETF bonus da risparmio fiscale reinvestito nel portafoglio del Simulatore.
     // Cresce al rendimento NETTO del portafoglio scelto (etfRet), con tassazione
@@ -226,6 +235,13 @@ function calcPensione() {
   // (è un incasso una tantum, non un capitale a rendita), non sommato all'ETF.
   const aliqSepTFR     = Math.min(0.43, Math.max(0.23, aliqMargIRPEF));
   const capTfrAzNetto  = capTfrAz * (1 - aliqSepTFR);
+  // Lordo/netto del TFR nei due regimi (per la card di trasparenza fiscale):
+  //  • azienda: tassazione separata all'aliquota media IRPEF
+  //  • fondo:   tassazione agevolata 15%→9% (aliqFP)
+  const tfrInfo = {
+    azienda: { lordo: Math.round(capTfrAz),  netto: Math.round(capTfrAzNetto),        aliq: aliqSepTFR },
+    fondo:   { lordo: Math.round(capTfrFp),  netto: Math.round(capTfrFp*(1-aliqFP)),  aliq: aliqFP },
+  };
   const etfCap         = penState.etfCapital + capETFBonusNetto;
   const swr            = 0.04;
   const etfPrelievoAnn = etfCap * swr;
@@ -262,7 +278,7 @@ function calcPensione() {
     aliqFP, aliqMargIRPEF, risparmioFisc, rispFiscMens,
     deduzEffettiva, deduzLorda, anniAdesione, capFP, rendFPNetta,
     tfrAnnuoMedio, extraFP, extraETF, capETFBonus,
-    fpDatoriale: fpVersAnnDat, fpLavoratore: fpVersAnnLav,
+    fpDatoriale: fpVersAnnDat, fpLavoratore: fpVersAnnLav, fpVersAnnDat, plafondResiduo,
     fpVersAnnVolont, rispFiscDest,
   };
 
@@ -284,6 +300,7 @@ function calcPensione() {
     etfCap:            Math.round(etfCap),
     capETFBonus:       Math.round(capETFBonus),
     capTfrAzNetto:     Math.round(capTfrAzNetto),
+    tfrInfo,
     yearsToRet, yearsInPen,
     dec0: decData[0] ?? null,
   };
@@ -402,7 +419,7 @@ function renderPensione() {
 
 // ── KPI Cards ────────────────────────────────────────────────
 function renderPenKPI(r) {
-  const { pensioneNettaMens, rendFPMens, etfPrelievoMens, dec0, yearsToRet, tassoSost, cumMontante, capFP, etfCap, coeffTrasf, capTfrAzNetto } = r;
+  const { pensioneNettaMens, rendFPMens, etfPrelievoMens, dec0, yearsToRet, tassoSost, cumMontante, capFP, etfCap, coeffTrasf, capTfrAzNetto, tfrInfo } = r;
   const deflaz     = Math.pow(1 + penState.infl, yearsToRet);
   const toReal     = v => v / deflaz;
   const fabb       = dec0?.fabbisognoMens ?? (penState.desired * deflaz);
@@ -424,6 +441,12 @@ function renderPenKPI(r) {
       <div class="mv" style="color:var(--purple)">${fmt(rendFPMens)}<span style="font-size:11px;opacity:.6">/m</span></div>
       <div class="ms">≈ ${fmt(fpReal)}/m in € di oggi · cap. ${fmt(capFP)}</div>
     </div>
+    ${tfrInfo && tfrInfo.fondo.lordo > 0 ? `
+    <div class="mcard">
+      <div class="ml">TFR nel fondo (quota)</div>
+      <div class="mv" style="color:var(--purple)">${fmt(tfrInfo.fondo.netto)}</div>
+      <div class="ms">${fmt(tfrInfo.fondo.lordo)} lordo → ${fmt(tfrInfo.fondo.netto)} netto (tass. agevolata ${(tfrInfo.fondo.aliq*100).toFixed(1)}%) · già incluso nel capitale FP</div>
+    </div>` : ''}
     <div class="mcard">
       <div class="ml">Prelievo ETF Portfolio</div>
       <div class="mv" style="color:var(--teal)">${fmt(etfPrelievoMens)}<span style="font-size:11px;opacity:.6">/m</span></div>
@@ -433,7 +456,7 @@ function renderPenKPI(r) {
     <div class="mcard">
       <div class="ml">TFR liquidazione (azienda)</div>
       <div class="mv" style="color:var(--orange)">${fmt(capTfrAzNetto)}</div>
-      <div class="ms">Incasso una tantum al pensionamento · ≈ ${fmt(Math.round(toReal(capTfrAzNetto)))} in € di oggi · netto tassazione separata</div>
+      <div class="ms">${fmt(tfrInfo.azienda.lordo)} lordo → ${fmt(tfrInfo.azienda.netto)} netto (tass. separata ${(tfrInfo.azienda.aliq*100).toFixed(0)}%) · incasso una tantum · ≈ ${fmt(Math.round(toReal(capTfrAzNetto)))} in € di oggi</div>
     </div>` : ''}
     <div class="mcard">
       <div class="ml">Totale disponibile</div>
@@ -562,7 +585,7 @@ function renderPenINPS(r) {
 function renderPenFP(r) {
   const { capFP, rendFPMens, rendFPNetta, fiscData } = r;
   const { aliqFP, anniAdesione, risparmioFisc, deduzEffettiva, aliqMargIRPEF,
-          fpDatoriale, fpLavoratore, fpVersAnnVolont } = fiscData;
+          fpDatoriale, fpLavoratore, fpVersAnnVolont, fpVersAnnDat, plafondResiduo } = fiscData;
   const isNeg = penState.isNegoziale;
   const negRow = isNeg ? `
       <div class="mcard"><div class="ml">Contrib. datoriale</div><div class="mv" style="color:${penState.tfrSi?'var(--green)':'var(--red)'}">${penState.tfrSi ? fmt(Math.round(fpDatoriale/12)) : '€0'}<span style="font-size:11px;opacity:.6">/m</span></div><div class="ms">${penState.tfrSi ? `${(penState.contDatoriale*100).toFixed(1)}% RAL · ${fmt(fpDatoriale)}/a` : '⚠️ Richiede il TFR al fondo'}</div></div>
@@ -573,14 +596,14 @@ function renderPenFP(r) {
       <div class="mcard"><div class="ml">Rendita netta mensile</div><div class="mv" style="color:var(--purple)">${fmt(rendFPMens)}</div><div class="ms">Al netto tassazione ${(aliqFP*100).toFixed(0)}%</div></div>
       <div class="mcard"><div class="ml">Tassazione rendimento</div><div class="mv" style="color:var(--orange)">20%</div><div class="ms">Annua sulle plusvalenze (vs 26% ETF)</div></div>
       <div class="mcard"><div class="ml">Tassazione prestazione</div><div class="mv" style="color:${aliqFP<=0.12?'var(--green)':'var(--orange)'}">${(aliqFP*100).toFixed(1)}%</div><div class="ms">${anniAdesione} anni adesione (min 9%)</div></div>
-      <div class="mcard"><div class="ml">Deducibilità annua</div><div class="mv" style="color:var(--green)">${fmt(deduzEffettiva)}</div><div class="ms">Limite €5.164,57/a · applicata ${(aliqMargIRPEF*100).toFixed(0)}%</div></div>
+      <div class="mcard"><div class="ml">Deducibilità annua</div><div class="mv" style="color:var(--green)">${fmt(deduzEffettiva)}</div><div class="ms">${fpVersAnnDat > 0 ? `Plafond €5.300 − ${fmt(Math.round(fpVersAnnDat))} datoriale = ${fmt(Math.round(plafondResiduo))} disp.` : 'Limite €5.300/a (2026)'} · applicata ${(aliqMargIRPEF*100).toFixed(0)}%</div></div>
       <div class="mcard"><div class="ml">Risparmio IRPEF annuo</div><div class="mv" style="color:var(--green)">${fmt(risparmioFisc)}</div><div class="ms">${fmt(Math.round(risparmioFisc/12))}/mese · aliq. marg. ${(aliqMargIRPEF*100).toFixed(0)}%</div></div>
       <div class="mcard"><div class="ml">TFR al fondo</div><div class="mv" style="color:${penState.tfrSi?'var(--green)':'var(--red)'}">${penState.tfrSi ? '✅ Sì' : '❌ No'}</div><div class="ms">${penState.tfrSi ? fmt(Math.round(penState.ral/13.5/12))+'/m (RAL÷13,5)' : 'Resta in azienda'}</div></div>
       ${negRow}
     </div>
     <div style="background:#f3e8fd;border:1px solid #d7aefb;border-radius:var(--radius-sm);padding:12px 16px;font-size:12px;color:#6200ea;line-height:1.7">
       <strong>Vantaggi fiscali (D.Lgs. 252/2005):</strong>
-      Contributi fino a €5.164,57 deducibili dall'IRPEF → risparmio immediato di <strong>${fmt(risparmioFisc)}/anno</strong>.
+      Contributi fino a €5.300 deducibili dall'IRPEF → risparmio immediato di <strong>${fmt(risparmioFisc)}/anno</strong>.
       Rendimenti tassati al <strong>20% annuo</strong> (vs 26% ETF, ma con tassazione immediata vs tax deferral ETF).
       Prestazione finale tassata al ${(aliqFP*100).toFixed(1)}% (scende dal 15% al 9% con 35+ anni di adesione).
       ${isNeg ? `<br><strong>Fondo negoziale:</strong> il datore contribuisce ${fmt(fpDatoriale)}/anno (${(penState.contDatoriale*100).toFixed(1)}% RAL) — versamento "gratuito" per il lavoratore che entra solo versando la quota contrattuale (${fmt(fpLavoratore)}/anno).` : ''}
@@ -654,7 +677,7 @@ function renderPenRispFisc(r) {
       ${rispFiscDest === 'spendi'
         ? `Il risparmio IRPEF viene consumato ogni anno. Non si accumula capitale aggiuntivo, ma aumenta il tenore di vita attuale (${fmt(rispFiscMens)}/mese extra).`
         : rispFiscDest === 'reinvesti_fp'
-        ? `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene versato ogni anno come contributo aggiuntivo al fondo pensione. Beneficia anche lui della deducibilità (fino al limite €5.164,57). Rendimento netto: ${(fpRet*80).toFixed(1)}%/a (tassazione 20% annua plusvalenze). Capitale aggiuntivo stimato: <strong>${fmt(Math.round(capReinvFP))}</strong>.`
+        ? `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene versato ogni anno come contributo aggiuntivo al fondo pensione. Beneficia anche lui della deducibilità (fino al limite €5.300). Rendimento netto: ${(fpRet*80).toFixed(1)}%/a (tassazione 20% annua plusvalenze). Capitale aggiuntivo stimato: <strong>${fmt(Math.round(capReinvFP))}</strong>.`
         : `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene investito nel portafoglio ETF del simulatore (fuori dal FP). Sfrutta il <em>tax deferral</em>: nessuna tassazione intermedia, solo 26% sulla plusvalenza alla vendita finale. Capitale netto stimato: <strong>${fmt(Math.round(capReinvETFNetto))}</strong>.`
       }
     </div>`;
