@@ -748,7 +748,7 @@ function calcCustomParams() {
     if (ac.isEq)        eqW   += w;
     else if (ac.isGold) goldW += w;
     else if (ac.isCash) cashW += w;
-    else if (ac.cat === 'ob') obW += w;          // vero obbligazionario → aliquota ridotta 12,5%
+    else if (ac.cat === 'ob_usa' || ac.cat === 'ob_eu' || ac.cat === 'ob_glob') obW += w; // obblig. governative → 12,5%
     else                otherFullW += w;          // trend/carry/commodities/reit/factor → 26% (redditi diversi)
   }
   const obW2 = Math.max(0, obW || (1 - eqW - goldW - cashW - otherFullW));
@@ -2939,6 +2939,7 @@ function renderCustomBuilder() {
       <span class="custom-param-chip">Ob: <strong>${(cp.ob*100).toFixed(0)}%</strong></span>
       ${cp.goldW>0?`<span class="custom-param-chip">Oro: <strong>${(cp.goldW*100).toFixed(0)}%</strong></span>`:''}
       ${cp.cashW>0?`<span class="custom-param-chip">Cash: <strong>${(cp.cashW*100).toFixed(0)}%</strong></span>`:''}
+      ${cp.otherFullW>0?`<span class="custom-param-chip" title="Trend following, carry, commodities, REIT, fattori — tassati al 26%">Alt: <strong>${(cp.otherFullW*100).toFixed(0)}%</strong></span>`:''}
     </div>`;
   el.innerHTML = `
     <div class="sec-label" style="margin-bottom:12px">🔧 Builder Portafoglio Custom</div>
@@ -4299,7 +4300,7 @@ async function generatePDF() {
         ['Azioni', ((portMeta.eq || 0) * 100).toFixed(0) + '%'],
         ['Obbligazioni', ((portMeta.ob || 0) * 100).toFixed(0) + '%'],
         ['Oro / commodities', ((portMeta.gold || 0) * 100).toFixed(0) + '%'],
-        ['Trend following / managed futures', ((portMeta.trend || 0) * 100).toFixed(0) + '%'],
+        ['Trend following / managed futures / alternativi', (((portMeta.trend || 0) + (portMeta.otherFullW || 0)) * 100).toFixed(0) + '%'],
         ['Cash / liquidita', ((portMeta.cash || 0) * 100).toFixed(0) + '%'],
         ['Rendimento reale storico', ((portMeta.realRet || 0) * 100).toFixed(2) + '% /a'],
         ['Beta vs inflazione', String(portMeta.inflBeta ?? 'n/d')],
