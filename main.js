@@ -1515,7 +1515,7 @@ function renderInflation(vN, vW, vBt, inv, years, dN) {
       </div>`).join('')}
     </div>
     <div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:var(--radius-sm);padding:12px;font-size:12px;color:#795548;line-height:1.7">
-      In <strong>${years} anni</strong> al <strong>${inflBase.toFixed(1)}%</strong> (inflaz. centrale): ogni €100 oggi = €${(100 * dF_base).toFixed(0)} nominali. Erosione potere d'acquisto: <strong style="color:var(--red)">${((1 - 1 / dF_base) * 100).toFixed(1)}%</strong>. 
+      In <strong>${years} anni</strong> al <strong>${(inflBase * 100).toFixed(1)}%</strong> (inflaz. centrale): ogni €100 oggi = €${(100 * dF_base).toFixed(0)} nominali. Erosione potere d'acquisto: <strong style="color:var(--red)">${((1 - 1 / dF_base) * 100).toFixed(1)}%</strong>. 
       Il portafoglio <strong>${getPortLabel(state.portfolio)}</strong> ha un beta inflazione di <strong>${portInflBeta > 0 ? '+' : ''}${portInflBeta.toFixed(2)}</strong> — 
       ${portInflBeta > 0.3 ? 'ottima difesa contro l\'erosione monetaria' : portInflBeta > 0 ? 'copertura parziale — i rendimenti reali potrebbero ridursi in contesti di alta inflazione' : 'attenzione: questo portafoglio soffre significativamente in periodi di alta inflazione'}.
     </div>`;
