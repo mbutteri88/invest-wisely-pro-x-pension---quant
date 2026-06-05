@@ -273,6 +273,11 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
   let portValue = w0;
   let totalInvested = w0;
   const monthlyValues = [w0];
+  // pureValues: valore del portafoglio SENZA i nuovi contributi PAC, per il drawdown
+  // Il drawdown "puro" misura la perdita dovuta al mercato, non mascherata dai versamenti.
+  // È il numero corretto da mostrare come Max Drawdown nella card rischio di sequenza.
+  let pureValue = w0;
+  const pureMonthlyValues = [w0];
   const monthlyReturns = [];   // rendimento mensile del portafoglio (per TWR money-weighted-free)
   const annualValues = [w0];
   const annualInvested = [w0];
@@ -316,6 +321,14 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
     totalInvested += pacMonthly;
     const mid = portValue + pacMonthly / 2;
     portValue = Math.max(0, portValue + pacMonthly + mid * portRet);
+
+    // pureValue: rendimento di mercato sul capitale già investito, senza nuovi PAC.
+    // Per solo_cap (pacMonthly=0): coincide con portValue, nessuna differenza.
+    // Per cap_pac (w0>0, pac>0): misura la perdita del capitale accumulato pre-crisi
+    //   senza che i versamenti mensili mascherino il drawdown.
+    // Per solo_pac (w0=0): pureValue resterebbe 0 → non usato; si ricade su monthlyValues.
+    pureValue = Math.max(0, pureValue * (1 + portRet));
+    pureMonthlyValues.push(pureValue);
 
     // Eventi una tantum a inizio di ciascun anno (coerente col simulatore principale):
     // aggiunte lump sum (PIC) e prelievi (uscite). Applicati a fine mese di dicembre
@@ -388,7 +401,11 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
 
   // Manteniamo `cagr` come alias dell'IRR per compatibilità con il resto del codice.
   const cagr          = irr;
-  const dd            = maxDrawdown(annualValues);
+  // Per solo_pac (w0=0) pureMonthlyValues è una lista di zeri: non ha senso misurare
+  // il drawdown su di essa. In quel caso si usa monthlyValues (il valore reale inclusi i PAC),
+  // che per una rendita pura è comunque l'unico riferimento significativo.
+  const ddSource = w0 > 0 ? pureMonthlyValues : monthlyValues;
+  const dd            = maxDrawdown(ddSource);
   const realValues    = annualValues.map((v, i) => {
     let cumI = 1;
     for (let j = 0; j < Math.min(i, annualInflations.length); j++) cumI *= (1 + annualInflations[j]);
@@ -414,7 +431,7 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
   }
   
   return {
-    annualValues, annualInvested, realValues,
+    annualValues, annualInvested, realValues, monthlyValues, pureMonthlyValues,
     finalValue, finalInvested, totalReturn, cagr, irr, twr, maxDD: dd,
     years: annualValues.length - 1,
     yearlyEqReturns, cumInflation: cumInfl,

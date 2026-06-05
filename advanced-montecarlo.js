@@ -1,7 +1,7 @@
 // ██████  MODULO 2 — MONTE CARLO AVANZATO
 // ══════════════════════════════════════════════════════════════
 let advMCState = { model: 'student', N: 2000, nu: 4 };
-let chartAdvMC = null, chartAdvComp = null, chartGarch = null, chartRegime = null;
+let chartAdvMC = null, chartAdvComp = null, chartGarch = null, chartRegime = null, chartAdvHist = null;
 
 // Campionatore t di Student (Box-Muller + Chi-quadro)
 function randn_t(nu) {
@@ -397,6 +397,110 @@ function renderAdvMCResults() {
     if (chartRegime) { chartRegime.destroy(); chartRegime=null; }
     chartRegime=new Chart(document.getElementById('chRegime'),{type:'bar',data:{labels:regimeHistory.map((_,i)=>'A'+(i+1)),datasets:[{label:'Regime',data:regimeHistory.map(s=>s==='bull'?1:-1),backgroundColor:regimeHistory.map(s=>s==='bull'?'rgba(30,142,62,.7)':'rgba(217,48,37,.7)'),borderRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.raw===1?' Bull Market':' Bear Market'}}},scales:{x:{display:false},y:{ticks:{color:tC,callback:v=>v===1?'Bull':v===-1?'Bear':''},min:-1.5,max:1.5}}}});
   } else document.getElementById('regimeSection').style.display='none';
+
+  // Istogramma distribuzione dei capitali finali (legge dati già calcolati)
+  try { renderAdvMCHistogram(results, P, model); } catch (e) { /* l'istogramma non deve mai bloccare il render */ }
+}
+
+// ── Istogramma della distribuzione dei capitali finali ──────────────────────
+// Legge l'array `results` (già calcolato e ordinato) e i percentili `P`.
+// Non ricalcola nulla del motore di simulazione. Mostra la forma reale della
+// distribuzione — asimmetrica a destra (log-normale) — con linee di riferimento
+// su mediana (P50) e capitale versato.
+function renderAdvMCHistogram(results, P, model) {
+  const canvas = document.getElementById('chAdvHist');
+  if (!canvas || !Array.isArray(results) || results.length === 0) return;
+  if (chartAdvHist) { chartAdvHist.destroy(); chartAdvHist = null; }
+
+  // Capitale versato (riferimento): capitale iniziale + PAC + PIC - uscite
+  let invested = state.w || 0;
+  try {
+    for (let y = 1; y <= state.years; y++) {
+      invested += (getPacForYear(y) * 12);
+      invested += state.pics.filter(p => +p.year === y).reduce((s, p) => s + (+p.amount || 0), 0);
+      invested -= state.exps.filter(e => +e.year === y).reduce((s, e) => s + (+e.amount || 0), 0);
+    }
+  } catch (e) { /* fallback: invested resta il solo capitale iniziale */ }
+
+  // Costruzione bin: taglio la coda destra estrema al 98° percentile per leggibilità
+  // (i pochi outlier altissimi schiaccerebbero tutto il resto), segnalandolo.
+  const sorted = results;                          // già ordinato in runAdvancedMC
+  const lo = sorted[0];
+  const p98 = sorted[Math.floor(sorted.length * 0.98)] || sorted[sorted.length - 1];
+  const hi = Math.max(p98, lo + 1);
+  const NB = 28;                                   // numero di bin
+  const binW = (hi - lo) / NB;
+  const bins = new Array(NB).fill(0);
+  let overflow = 0;
+  for (const v of sorted) {
+    if (v > hi) { overflow++; continue; }
+    let k = Math.floor((v - lo) / binW);
+    if (k >= NB) k = NB - 1; if (k < 0) k = 0;
+    bins[k]++;
+  }
+  // Etichette dei bin (centro) e colore: rosso sotto il versato, verde sopra
+  const centers = bins.map((_, i) => lo + binW * (i + 0.5));
+  const labels = centers.map(c => fmt(c));
+  const colors = centers.map(c => c < invested ? 'rgba(217,48,37,.55)' : 'rgba(30,142,62,.55)');
+
+  const gC = 'rgba(0,0,0,.05)', tC = 'rgba(0,0,0,.45)';
+  const p50 = P && P.p50 ? P.p50 : sorted[Math.floor(sorted.length * 0.5)];
+
+  // Linee di riferimento (mediana e versato) via plugin inline
+  const refLines = {
+    id: 'advHistRefs',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+      const draw = (val, color, text) => {
+        if (val < lo || val > hi) return;
+        const px = x.getPixelForValue((val - lo) / binW - 0.5);
+        if (!isFinite(px)) return;
+        ctx.save();
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(px, top); ctx.lineTo(px, bottom); ctx.stroke();
+        ctx.setLineDash([]); ctx.fillStyle = color;
+        ctx.font = '600 10px DM Mono, monospace';
+        ctx.save(); ctx.translate(px + 3, top + 4); ctx.fillText(text, 0, 8); ctx.restore();
+        ctx.restore();
+      };
+      draw(p50, '#1a73e8', 'Mediana');
+      draw(invested, '#5f6368', 'Versato');
+    }
+  };
+
+  chartAdvHist = new Chart(canvas, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Traiettorie', data: bins, backgroundColor: colors, borderWidth: 0, barPercentage: 1.0, categoryPercentage: 1.0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: c => 'Capitale finale ≈ ' + (c[0]?.label || ''),
+          label: c => ' ' + c.raw + ' traiettorie su ' + sorted.length + ' (' + (c.raw / sorted.length * 100).toFixed(1) + '%)'
+        }, backgroundColor: '#fff', borderColor: '#dadce0', borderWidth: 1, titleColor: '#202124', bodyColor: '#5f6368', padding: 10 }
+      },
+      scales: {
+        x: { ticks: { color: tC, font: { size: 9, family: 'DM Mono' }, maxTicksLimit: 8 }, grid: { display: false } },
+        y: { ticks: { color: tC, font: { size: 10, family: 'DM Mono' } }, grid: { color: gC }, title: { display: true, text: 'N. traiettorie', color: tC, font: { size: 10 } } }
+      }
+    },
+    plugins: [refLines]
+  });
+
+  // Nota esplicativa sotto il grafico
+  const noteEl = document.getElementById('advHistNote');
+  if (noteEl) {
+    const pctBelow = (sorted.filter(v => v < invested).length / sorted.length * 100).toFixed(0);
+    let txt = `Distribuzione dei <strong>${sorted.length.toLocaleString('it-IT')}</strong> capitali finali simulati. `;
+    txt += `La forma è <strong>asimmetrica a destra</strong> (log-normale): un investimento può al massimo azzerarsi, ma la coda dei guadagni è lunga. `;
+    txt += `In <strong style="color:var(--red)">rosso</strong> le traiettorie sotto il capitale versato (${pctBelow}%), in <strong style="color:var(--green)">verde</strong> quelle sopra. `;
+    if (model === 'student') txt += `Col modello <strong>t di Student</strong> osserva la coda sinistra più spessa: è la firma dei crash più frequenti. `;
+    else if (model === 'regime') txt += `Col modello <strong>Regime-Switching</strong> la distribuzione può apparire leggermente bimodale (scenari rimasti in bull vs finiti in bear). `;
+    else if (model === 'bootstrap') txt += `Col <strong>Block Bootstrap</strong> la forma riflette sequenze storiche reali, non una distribuzione teorica. `;
+    if (overflow > 0) txt += `<span style="color:var(--text3)">(${overflow} traiettorie oltre il 98° percentile non mostrate per leggibilità.)</span>`;
+    noteEl.innerHTML = txt;
+  }
 }
 
 function renderAdvMCComparison() {

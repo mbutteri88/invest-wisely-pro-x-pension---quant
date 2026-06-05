@@ -668,7 +668,7 @@ function renderPenRispFisc(r) {
       <div class="mcard" style="flex:1;min-width:140px;${rispFiscDest==='reinvesti_etf'?'border-color:var(--teal)':''}">
         <div class="ml">📈 Se reinvesti in ETF</div>
         <div class="mv" style="color:var(--teal)">${fmt(Math.round(capReinvETFNetto))}</div>
-        <div class="ms">Rendimento ${(fpRet*100).toFixed(1)}% · tax deferral → 26% solo alla fine · +${fmt(Math.round(capReinvETFNetto - totRisp))} vs speso</div>
+        <div class="ms">Rendimento ${(etfRet*100).toFixed(1)}% (piano simulatore) · tax deferral → 26% solo alla fine · +${fmt(Math.round(capReinvETFNetto - totRisp))} vs speso</div>
       </div>
     </div>
 
@@ -678,7 +678,7 @@ function renderPenRispFisc(r) {
         ? `Il risparmio IRPEF viene consumato ogni anno. Non si accumula capitale aggiuntivo, ma aumenta il tenore di vita attuale (${fmt(rispFiscMens)}/mese extra).`
         : rispFiscDest === 'reinvesti_fp'
         ? `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene versato ogni anno come contributo aggiuntivo al fondo pensione. Beneficia anche lui della deducibilità (fino al limite €5.300). Rendimento netto: ${(fpRet*80).toFixed(1)}%/a (tassazione 20% annua plusvalenze). Capitale aggiuntivo stimato: <strong>${fmt(Math.round(capReinvFP))}</strong>.`
-        : `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene investito nel portafoglio ETF del simulatore (fuori dal FP). Sfrutta il <em>tax deferral</em>: nessuna tassazione intermedia, solo 26% sulla plusvalenza alla vendita finale. Capitale netto stimato: <strong>${fmt(Math.round(capReinvETFNetto))}</strong>.`
+        : `Il risparmio IRPEF (${fmt(risparmioFisc)}/anno) viene investito nel portafoglio ETF del simulatore (fuori dal FP) al rendimento netto <strong>${(etfRet*100).toFixed(1)}%/a</strong>. Sfrutta il <em>tax deferral</em>: nessuna tassazione intermedia, solo 26% sulla plusvalenza alla vendita finale. Capitale netto stimato: <strong>${fmt(Math.round(capReinvETFNetto))}</strong>.`
       }
     </div>`;
 }

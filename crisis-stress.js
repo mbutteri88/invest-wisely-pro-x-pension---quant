@@ -212,11 +212,14 @@ function simulateCrisisPath(crisis, portKey, capitalEur, pacMonthly) {
 
     if (cumValue > peak) peak = cumValue;
     if (cumEur > peakEur) peakEur = cumEur;
-    // Drawdown: se c'è PAC usa il valore in euro (riflette il capitale reale esposto),
-    // altrimenti il valore normalizzato.
-    const dd = pac > 0
-      ? (peakEur > 0 ? (cumEur - peakEur) / peakEur : 0)
-      : (peak > 0 ? (cumValue - peak) / peak : 0);
+    // Drawdown: SEMPRE sul valore di mercato "puro" (cumValue, senza PAC), coerente
+    // con la sezione Rischio di Sequenza del Backtesting (pureMonthlyValues).
+    // Usare cumEur quando pac>0 mascherava il drawdown: i versamenti mensili
+    // resettavano il picco e a inizio piano (PAC grande vs capitale piccolo) la
+    // caduta % appariva ~−9% invece del reale ~−42% di mercato. Il capitale esposto
+    // in euro resta riflesso da peakEur/lossEur, ma la PROFONDITÀ del crollo è
+    // quella di mercato, identica in tutti gli stadi (è la stessa crisi).
+    const dd = peak > 0 ? (cumValue - peak) / peak : 0;
     if (dd < maxDD) { maxDD = dd; maxDDMonth = idx - startIdx; }
     if (portRet < worstMonthRet) { worstMonthRet = portRet; worstMonthIdx = idx - startIdx; }
 
@@ -234,7 +237,7 @@ function simulateCrisisPath(crisis, portKey, capitalEur, pacMonthly) {
       cumValue: +cumValue.toFixed(3),
       cumEur:   Math.round(cumEur),
       invested: Math.round(invested),
-      drawdown: +((pac > 0 ? (cumEur/peakEur - 1) : (cumValue / peak - 1)) * 100).toFixed(2),
+      drawdown: +((peak > 0 ? (cumValue / peak - 1) : 0) * 100).toFixed(2),
     });
   }
 
