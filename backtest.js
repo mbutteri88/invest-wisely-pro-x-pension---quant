@@ -102,6 +102,7 @@ let btState = {
   pac: 500,
   w: 10000,
   showReal: false,
+  capeEnabled: true,  // aggiustamento CAPE Shiller attivo per default
   seqCrisis: 2008,   // crisi selezionata per lo stress test di sequenza
   seqMode: 'cap_pac', // modalità versamento: 'cap_pac' | 'solo_cap' | 'solo_pac'
   crisisSeqMode: 'solo_cap', // modalità versamento per la sezione Stress Test Macro
@@ -195,6 +196,13 @@ function toggleBtInflation() {
   document.getElementById('btInflTog').classList.toggle('on', btState.showReal);
 }
 
+function toggleBtCape() {
+  btState.capeEnabled = !btState.capeEnabled;
+  document.getElementById('btCapeTog').classList.toggle('on', btState.capeEnabled);
+  // Ri-esegue il backtest se i risultati sono già visibili
+  if (document.getElementById('btResults').style.display !== 'none') runBacktest();
+}
+
 // Calcola indici dell'array HIST_MONTHLY a partire dall'anno
 function yearToHistIdx(year) {
   return Math.max(0, (year - 1970) * 12);
@@ -239,7 +247,7 @@ function getCorrMultiplier(eqDraw, obDraw) {
 // mercati economici (CAPE basso) → rendimenti futuri attesi più alti.
 // Questo NON altera la struttura dei crash storici (i mesi negativi rimangono
 // negativi), agisce solo sul drift medio annualizzato del componente azionario.
-function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
+function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents, useCape) {
   const startIdx = yearToHistIdx(startYear);
   const years = Math.min(state.years, Math.floor((HIST_MONTHLY.length - startIdx) / 12));
   const months = years * 12;
@@ -259,7 +267,9 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
 
   // ── Fattore CAPE: scala il rendimento azionario in base alle valutazioni di partenza
   const capeStart  = CAPE_HIST[startYear] || null;
-  const capeFactor = capeAdjEquityFactor(startYear); // [0.55, 1.55]
+  // useCape: undefined → usa btState.capeEnabled (chiamata da UI); true/false → override esplicito
+  const _capeOn = (useCape !== undefined) ? useCape : (typeof btState !== 'undefined' ? btState.capeEnabled : true);
+  const capeFactor = _capeOn ? capeAdjEquityFactor(startYear) : 1.0; // 1.0 = nessun aggiustamento
   // L'aggiustamento è graduale: nei primi anni pesa di più (mean-reversion più lenta
   // per valutazioni molto estreme), poi si attenua. Usiamo una rampa lineare su 10 anni.
   // Anno 1: pieno fattore. Anno 10+: fattore → 1.0 (convergenza al rendimento storico).
@@ -273,7 +283,7 @@ function simulateBacktest(portKey, startYear, pacMonthly, w0, skipEvents) {
   let portValue = w0;
   let totalInvested = w0;
   const monthlyValues = [w0];
-  // pureValues: valore del portafoglio SENZA i nuovi contributi PAC, per il drawdown
+  // pureValues: valore del portafoglio SEN ZA i nuovi contributi PAC, per il drawdown
   // Il drawdown "puro" misura la perdita dovuta al mercato, non mascherata dai versamenti.
   // È il numero corretto da mostrare come Max Drawdown nella card rischio di sequenza.
   let pureValue = w0;
@@ -540,23 +550,28 @@ function runBacktest() {
     .join('');
 
   // Nota CAPE interpretativa sotto i KPI
-  if (result.capeStart && result.capeAdj) {
+  const _capeOnUI = btState.capeEnabled !== false; // legge lo stato toggle dalla UI
+  const capeNoteEl = document.getElementById('btCapeNote');
+  if (result.capeStart && result.capeAdj && _capeOnUI) {
     const direction = result.capeFactor > 1 ? 'sottovalutato' : 'sopravvalutato';
     const effect    = result.capeFactor > 1 ? 'superiori alla media storica' : 'inferiori alla media storica';
     const delta     = result.cagrNoCape != null
       ? ` Il rendimento asset (TWR) senza aggiustamento CAPE sarebbe stato <strong>${(result.cagrNoCape >= 0 ? '+' : '') + (result.cagrNoCape * 100).toFixed(2)}%/a</strong> (delta: ${((result.twr - result.cagrNoCape) * 100).toFixed(2)}pp).`
       : '';
-    const capeNoteEl = document.getElementById('btCapeNote');
     if (capeNoteEl) {
       capeNoteEl.style.display = 'block';
-      capeNoteEl.innerHTML = `<strong>📊 Aggiustamento CAPE attivo</strong> — Nel ${startYear} il mercato era <strong style="color:${capeLabel?.col}">${direction}</strong> (CAPE ${result.capeStart.toFixed(1)}, ${capePct}° percentile storico). La regressione Shiller prevede rendimenti azionari <strong>${effect}</strong> → fattore di scala ×${result.capeFactor.toFixed(2)} applicato al drift equity (rampa lineare su 10 anni).${delta}`;
+      capeNoteEl.innerHTML = `<strong>Aggiustamento CAPE attivo</strong> — Nel ${startYear} il mercato era <strong style="color:${capeLabel?.col}">${direction}</strong> (CAPE ${result.capeStart.toFixed(1)}, ${capePct}° percentile storico). La regressione Shiller prevede rendimenti azionari <strong>${effect}</strong> — fattore di scala x${result.capeFactor.toFixed(2)} applicato al drift equity (rampa lineare su 10 anni).${delta}`;
+    }
+  } else if (result.capeStart && !_capeOnUI) {
+    if (capeNoteEl) {
+      capeNoteEl.style.display = 'block';
+      capeNoteEl.innerHTML = `<strong>CAPE adjust disattivato</strong> — CAPE ${startYear}: <strong>${result.capeStart.toFixed(1)}</strong> (${capePct}° percentile, ${capeLabel?.txt}). Fattore Shiller non applicato: la simulazione usa i rendimenti storici grezzi senza correzione per le valutazioni di partenza.`;
     }
   } else {
-    const capeNoteEl = document.getElementById('btCapeNote');
     if (capeNoteEl) capeNoteEl.style.display = 'none';
   }
 
-  // Crea btCapeNote dinamicamente se non esiste (non è nell'HTML originale)
+    // Crea btCapeNote dinamicamente se non esiste (non è nell'HTML originale)
   if (!document.getElementById('btCapeNote')) {
     const statsEl = document.getElementById('btStats');
     if (statsEl) {

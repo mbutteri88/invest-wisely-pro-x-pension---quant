@@ -729,6 +729,47 @@ function getCashWeight(port) {
   return m[port] ?? 0;
 }
 
+// ── Beta di crash per categoria di asset (sequence risk) ──────────────────────
+// Quanto ciascuna categoria si muove durante un crash AZIONARIO severo, espresso
+// come frazione del crollo azionario (1.0 = crolla come le azioni; 0 = neutro;
+// valori negativi = guadagna). Calibrati sull'evidenza dei crash storici reali
+// e tarati come impatto NETTO (gli asset alternativi recuperano meno dell'equity,
+// che beneficia del catch-up post-crash; quindi beta moderati evitano di renderli
+// paradossalmente peggiori delle azioni stesse):
+//   • equity      1.00  → subisce il crollo pieno (con recupero parziale successivo)
+//   • commodity   0.35  → nei crash di liquidità (2008, mar-2020) le materie prime
+//                          calano con le azioni (de-leveraging, calo domanda), ma
+//                          meno in profondità e con dinamica diversa. NON un rifugio.
+//   • carry       0.45  → le strategie di carry soffrono nelle crisi ("pennies in
+//                          front of a steamroller"): downside reale ma inferiore
+//                          all'azionario puro.
+//   • trend (MF)  -0.20 → "crisis alpha": il trend following tende a guadagnare
+//                          nei crash prolungati (2008, 2022). Beta negativo prudente.
+//   • gold/bond/cash → ricevono BOND_RALLY_RATE (fuga verso la sicurezza).
+// Beta deliberatamente prudenti: migliorano il realismo (commodity e carry NON
+// sono più trattati come rifugi) senza sovrastimare il danno né creare fragilità.
+const CRASH_BETA = { commodity: 0.35, carry: 0.45, trend: -0.20 };
+
+// Restituisce i pesi per categoria di sensibilità al crash di un portafoglio.
+// { eq, trendW, carryW, commodW, defensive } dove defensive = bond+gold+cash
+// (riceve il bond rally). La somma è 1.
+function getCrashWeights(port, age) {
+  let eq, trendW = 0, carryW = 0, commodW = 0, goldW = 0, cashW = 0;
+  if (port === 'custom') {
+    const cp = calcCustomParams();
+    eq = cp.eq; trendW = cp.trendW || 0; carryW = cp.carryW || 0;
+    commodW = cp.commodW || 0; goldW = cp.goldW || 0; cashW = cp.cashW || 0;
+  } else {
+    eq = getEquityWeight(port, age);
+    goldW = getGoldWeight(port);
+    cashW = getCashWeight(port);
+    // return_stack ha una quota trend (managed futures) esplicita
+    trendW = PORT[port]?.trend || 0;
+  }
+  const defensive = Math.max(0, 1 - eq - trendW - carryW - commodW - goldW - cashW) + goldW + cashW;
+  return { eq, trendW, carryW, commodW, defensive };
+}
+
 // ── Calcola parametri blended del portafoglio custom ──────────
 function calcCustomParams() {
   // ── 1. Filtra slot validi e normalizza i pesi ─────────────────
@@ -737,6 +778,10 @@ function calcCustomParams() {
 
   // ── 2. Rendimento atteso ponderato e beta inflazione ──────────
   let mu = 0, inflBeta = 0, eqW = 0, obW = 0, goldW = 0, cashW = 0, terW = 0, fxExpW = 0, otherFullW = 0;
+  // Pesi per categoria di sensibilità al crash (sequence risk). Sottoinsiemi di
+  // otherFullW: servono SOLO per modellare il comportamento in crisi (crash beta),
+  // non alterano la classificazione fiscale (otherFullW resta invariato).
+  let trendW = 0, carryW = 0, commodW = 0;
   for (const sl of slots) {
     const ac = ASSET_CLASSES[sl.ac];
     if (!ac) continue;
@@ -750,6 +795,10 @@ function calcCustomParams() {
     else if (ac.isCash) cashW += w;
     else if (ac.cat === 'ob_usa' || ac.cat === 'ob_eu' || ac.cat === 'ob_glob') obW += w; // obblig. governative → 12,5%
     else                otherFullW += w;          // trend/carry/commodities/reit/factor → 26% (redditi diversi)
+    // Categorizzazione per crash beta (non altera eqW/obW/otherFullW)
+    if (ac.cat === 'trend')      trendW  += w;
+    else if (ac.cat === 'carry') carryW  += w;
+    else if (ac.cat === 'real' && !ac.isGold) commodW += w; // commodities (oro escluso)
   }
   const obW2 = Math.max(0, obW || (1 - eqW - goldW - cashW - otherFullW));
 
@@ -813,6 +862,7 @@ function calcCustomParams() {
     volNoFx: sigma,                // vol senza componente FX (riferimento)
     eq:   eqW, ob: obW2, gold: goldW, cash: cashW,
     goldW, cashW, otherFullW,
+    trendW, carryW, commodW,        // pesi per categoria (modellazione crash/sequence risk)
     realRet:  Math.max(0, muNet - 0.021),
     inflBeta,
     ter:  terW,                    // TER pesato suggerito (ETF tipici)
@@ -1138,8 +1188,23 @@ function project(scenario, withSeq, terOverride = null, portOverride = null) {
   const crashMap = {};
   crashYears.forEach((cy, idx) => {
     const severityFactor = idx === 0 ? 1.0 : idx === 1 ? 0.65 : 0.45; // diminishing severity
-    const acw = getCrashYear(seq.timing, years) >= 0 ? getEquityWeight(portKey, age + cy) : 0;
-    const crRate = eqCR * severityFactor * acw + BOND_RALLY_RATE * (1 - acw);
+    const hasCrash = getCrashYear(seq.timing, years) >= 0;
+    const acw = hasCrash ? getEquityWeight(portKey, age + cy) : 0;
+    // Crash rate per categoria: equity crollo pieno; commodity/carry partecipano
+    // (beta>0); trend fa crisis alpha (beta<0); difensivo (bond/gold/cash) → rally.
+    let crRate;
+    if (hasCrash) {
+      const cw = getCrashWeights(portKey, age + cy);
+      const sev = eqCR * severityFactor;
+      crRate =
+          sev * cw.eq
+        + sev * CRASH_BETA.commodity * cw.commodW
+        + sev * CRASH_BETA.carry     * cw.carryW
+        + sev * CRASH_BETA.trend     * cw.trendW
+        + BOND_RALLY_RATE            * cw.defensive;
+    } else {
+      crRate = 0;
+    }
     const cuf = acw > 0 ? Math.pow(Math.pow(1 / (1 + eqCR * severityFactor), 1 / RECOVERY_YEARS), RECOVERY_CATCHUP) : 1;
     crashMap[cy] = { rate: crRate, cuf, acw, severityFactor };
   });
@@ -1273,7 +1338,15 @@ function runMontecarlo() {
   crashYearsList.forEach((cy, idx) => {
     const sf = idx === 0 ? 1.0 : idx === 1 ? 0.65 : 0.45;
     const cw2 = getEquityWeight(portfolio, age + cy);
-    const cr2 = eqCR * sf * cw2 + BOND_RALLY_RATE * (1 - cw2);
+    // Crash rate per categoria (coerente con project)
+    const cwCat = getCrashWeights(portfolio, age + cy);
+    const sev2 = eqCR * sf;
+    const cr2 =
+        sev2 * cwCat.eq
+      + sev2 * CRASH_BETA.commodity * cwCat.commodW
+      + sev2 * CRASH_BETA.carry     * cwCat.carryW
+      + sev2 * CRASH_BETA.trend     * cwCat.trendW
+      + BOND_RALLY_RATE             * cwCat.defensive;
     const cuf2 = cw2 > 0 ? Math.pow(Math.pow(1 / (1 + eqCR * sf), 1 / RECOVERY_YEARS), RECOVERY_CATCHUP) : 1;
     crashMap[cy] = { rate: cr2, cuf: cuf2, acw: cw2, sf };
   });
@@ -3412,7 +3485,13 @@ function updateSeqDesc() {
   const crashYears = getCrashYears(mode, state.seq.timing, state.years);
   const cY = crashYears[0] ?? 1;
   const aw = getEquityWeight(state.portfolio, state.age + cY);
-  const acr = SEQ_RATES[state.seq.severity] * aw + BOND_RALLY_RATE * (1 - aw);
+  const cwD = getCrashWeights(state.portfolio, state.age + cY);
+  const sevD = SEQ_RATES[state.seq.severity];
+  const acr = sevD * cwD.eq
+            + sevD * CRASH_BETA.commodity * cwD.commodW
+            + sevD * CRASH_BETA.carry     * cwD.carryW
+            + sevD * CRASH_BETA.trend     * cwD.trendW
+            + BOND_RALLY_RATE             * cwD.defensive;
   const pctv = Math.abs((acr * 100).toFixed(1)) + '%';
   const prefix = aw === 0 ? `Portafoglio 100% obbligazionario: Flight to Quality (+5%). ` : `Impatto portafoglio: −${pctv} nominale anno ${cY}. `;
   const msgs = { early: `${prefix}Magia del PAC in accumulo: comprando a sconto, il portafoglio può recuperare più velocemente.`, mid: `${prefix}Il PAC media al ribasso. Un PAC alto può annullare il danno nel medio periodo.`, late: `${prefix}Vero Sequence Risk: manca tempo per il recupero. La decorrelazione obbligazionaria è fondamentale.` };

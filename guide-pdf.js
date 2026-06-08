@@ -100,12 +100,14 @@ async function downloadGuidePDF() {
     li('Inflazione +1% -> erode il valore reale di circa il 22% in piu su 25 anni.');
     li('Aliquote fiscali -> applicate solo alla plusvalenza al disinvestimento. Vedi scheda Fiscalita IT per dettagli sui regimi.');
     h2('Toggle CAPE-adjusted returns');
-    p('Il pulsante CAPE nell\'intestazione del Simulatore attiva la ricalibrazione bayesiana dei rendimenti azionari sulla base del CAPE Shiller corrente (dati live aggiornati mensilmente).');
-    li('Ricalibrazione: R_10a = -0.56% + 17.88% / CAPE (regressione Shiller 1881-2024, R^2 = 0.72).');
-    li('Blend 55/45: rendimenti CAPE-adjusted (55%) + storici (45%) per ridurre sensibilita al dato puntuale.');
-    li('Badge colorato: mostra il delta vs rendimento storico (es. -1.2%/a in rosso se CAPE elevato).');
+    p('Il pulsante CAPE nell\'intestazione del Simulatore attiva la ricalibrazione dei rendimenti azionari sulla base del CAPE Shiller corrente (dati live aggiornati mensilmente).');
+    li('Metodo Earnings Yield Delta: il rendimento reale atteso di un mercato e approssimato dal suo earnings yield (1/CAPE). La ricalibrazione applica lo SCOSTAMENTO dell\'earnings yield corrente rispetto alla media storica (CAPE di riferimento ~20) al rendimento storico: R_fwd = R_storico + (1/CAPE_oggi - 1/CAPE_medio).');
+    li('Metodo trasparente e verificabile (coefficiente 1.0 sull\'earnings yield), preferito a una regressione opaca: il rendimento atteso di lungo periodo di un\'azione coincide col suo earnings yield.');
+    li('Blend 55/45: forward live (55%) + baseline (45%) per ridurre la sensibilita al dato puntuale (shrinkage bayesiano).');
+    li('Approccio a delta: lo scostamento di valutazione e applicato al baseline calibrato (non lo sostituisce), cosi il confronto storico-vs-CAPE isola il solo effetto delle valutazioni correnti.');
+    li('Badge colorato: mostra il delta vs rendimento storico (es. -0.9%/a in rosso se CAPE elevato).');
     li('CAPE USA: dataset GitHub aggiornato mensilmente. CAPE Europa: stimato da P/E MSCI Europe con correzione ciclica (CAPE_EU = 0.68 x CAPE_USA + 3.8).');
-    callout('Con CAPE USA ~30 (dato 2024), i rendimenti azionari attesi scendono di circa 1.0-1.5%/a vs media storica. Su 30 anni abbassa il valore atteso del 15-20% in scenario base. Utile per pianificazione conservativa con valutazioni elevate.', BLU, 'Impatto CAPE elevato');
+    callout('Con CAPE USA ~34 (dato 2024-25), i rendimenti azionari attesi scendono di circa 0.9-1.2%/a vs baseline. Su 30 anni abbassa il valore atteso in modo apprezzabile in scenario base. Utile per pianificazione conservativa con valutazioni elevate.', BLU, 'Impatto CAPE elevato');
     h2('Soglia di Optionality');
     p('Linea tratteggiata orizzontale sul grafico. Imposta il valore patrimoniale a cui inizi ad avere "scelta" (es. 300k EUR = part-time; 600k EUR = 2 anni sabbatici). E distinta dal FIRE (liberta finanziaria totale).');
 
@@ -168,7 +170,7 @@ async function downloadGuidePDF() {
     li('2022 — Inflazione & rialzo tassi: azioni -20% E obbligazioni -15% insieme. Il 60/40 perde -17%: peggior anno per portafogli bilanciati dal 1937.');
     h2('Metodologia e dati');
     li('Dati mensili reali: HIST_MONTHLY con rendimenti per asset class equity, bond, gold, cash calibrati su fonti primarie (Federal Reserve FRED, DMS Yearbook 2024, Fama-French Data Library).');
-    li('CAPE-adjusted equity: i rendimenti azionari sono scalati dal CAPE Shiller dell\'anno di partenza usando la regressione storica (R^2=0.72). CAPE alto = rendimenti attesi piu bassi, e viceversa.');
+    li('CAPE-adjusted equity: i rendimenti azionari sono aggiustati per il CAPE Shiller dell\'anno di partenza tramite Earnings Yield Delta (1/CAPE). CAPE alto = rendimenti attesi piu bassi, e viceversa.');
     li('Correlazioni dinamiche: in anni con drawdown equity > 15%, le correlazioni si avvicinano alla matrice STRESS (correlazioni osservate empiricamente in crisi). Cattura il \"correlation breakdown\" dei crash.');
     li('Inflazione storica: CPI annuale reale per ogni periodo, usato per deflatare e mostrare rendimento reale.');
     h2('Output del tab');
@@ -190,6 +192,14 @@ async function downloadGuidePDF() {
     p('Tutti i valori (capitale, PAC) sono quelli impostati nel Simulatore o nella sezione Portafoglio del Backtesting. Le 10 crisi storiche disponibili sono le stesse del backtest. Il capitale esposto al crollo cresce con la fase del piano perche tiene conto sia dei versamenti accumulati sia della crescita composta del capitale gia investito.');
     callout('Il punto chiave: per la stessa crisi, la caduta percentuale (Max Drawdown) è simile in tutte le fasi — è sempre lo stesso evento storico. Ciò che cambia drasticamente è la PERDITA IN EURO, perché il capitale esposto è molto diverso. Una crisi a fine piano può cancellare anni di capitale accumulato.', AMBER, 'Come leggere le tre card');
     callout('Questo è il motivo per cui i piani previdenziali riducono gradualmente la quota azionaria avvicinandosi all\'obiettivo (glide path): non per inseguire un rendimento maggiore, ma per ridurre il capitale esposto proprio quando una crisi farebbe piu danni e resterebbe meno tempo per recuperare.', BLU, 'Implicazione pratica');
+    h2('Come reagiscono le diverse asset class nel crash');
+    p('Il crollo non colpisce tutti gli asset allo stesso modo. Il modello applica a ciascuna categoria un "beta di crash" calibrato sull\'evidenza storica, cosi la simulazione riflette il comportamento reale in crisi e non tratta erroneamente ogni asset non-azionario come un rifugio:');
+    li('Azioni: subiscono il crollo pieno (beta 1.0), con recupero parziale nei 5 anni successivi.');
+    li('Obbligazioni governative, oro, liquidita: fungono da rifugio (flight to quality), con un lieve rally difensivo durante il crash azionario.');
+    li('Trend following / Managed futures: "crisis alpha" — tendono a guadagnare nelle crisi prolungate (2008, 2022) seguendo i trend ribassisti (beta -0.20). Sono veri diversificatori.');
+    li('Commodities: NON sono un rifugio. Nei crash di liquidita (2008, marzo 2020) calano insieme alle azioni per de-leveraging e calo della domanda, anche se meno in profondita (beta 0.35).');
+    li('Carry (FX e obbligazionario): soffrono nelle crisi ("raccogliere monetine davanti a uno schiacciasassi") — downside reale, inferiore all\'azionario puro ma significativo (beta 0.45).');
+    callout('Questa modellazione differenziata e importante per valutare correttamente portafogli che includono managed futures, commodities o carry: il loro contributo alla resilienza in crisi e molto diverso. I beta sono stime prudenti basate sull\'evidenza storica, non garanzie.', BLU, 'Beta di crash per categoria');
 
     h1('7b — Stress Test Macro Storici — Path Mensile Esatto');
     p('Sezione aggiuntiva del tab Backtesting: simulazione del percorso mensile preciso del portafoglio durante le 10 principali crisi macro della storia moderna (1970-2024), con i rendimenti mensili reali (ogni mese è il dato storico effettivo). Come nel Rischio di Sequenza, puoi scegliere la modalita di versamento (capitale + PAC, solo capitale, solo PAC) e la fase del piano in cui arriva la crisi (inizio, meta, fine): cosi il capitale esposto al crollo riflette quello realmente accumulato a quel punto del piano.');
@@ -236,9 +246,37 @@ async function downloadGuidePDF() {
     li('Dichiarativo + Costo Medio — media ponderata del prezzo di carico; bilanciato.');
     h2('Imposta di bollo');
     p('Pari allo 0,20% annuo sul valore del dossier titoli. A 30 anni puo erodere il 4-6% del capitale complessivo.');
+    h2('Tassazione differenziata per tipo di asset');
+    p('Nei portafogli Custom l\'aliquota sul capital gain dipende dalla natura dello strumento: le obbligazioni governative (e titoli di Stato di paesi white list) scontano il 12,5%, mentre azioni, ETF, trend following / managed futures, carry, commodities e fattori scontano il 26% (redditi diversi). L\'aliquota complessiva del portafoglio e la media pesata sui pesi degli asset.');
+    callout('Un portafoglio con managed futures, commodities o carry ha un\'aliquota effettiva piu alta di un classico azioni-obbligazioni governative, perche questi strumenti sono tassati al 26% e non al 12,5%. Il simulatore ne tiene conto nel calcolo del rendimento netto.', BLU, 'Aliquota effettiva');
     h2('Zainetto fiscale');
     p('Inserisci le minusvalenze pregresse (scadono dopo 4 anni) per stimare il risparmio fiscale residuo. In regime dichiarativo si compensano tutte le plusvalenze; in amministrato solo i redditi diversi (non ETF armonizzati).');
     callout('La fiscalita sugli strumenti finanziari italiani e complessa. Le simulazioni hanno scopo illustrativo. Per decisioni fiscali concrete consulta un commercialista o consulente fiscale abilitato.', AMBER, 'Nota legale');
+
+    h1('9a — Scheda Pensione (previdenza)');
+    p('Stima la pensione pubblica INPS e il ruolo della previdenza complementare (fondo pensione), per capire il "gap previdenziale" tra la pensione attesa e il tenore di vita desiderato, e quanto la previdenza integrativa puo colmarlo.');
+    h2('Input principali');
+    li('Eta attuale, eta di pensionamento, speranza di vita: definiscono gli anni di contribuzione residui e la durata della fase di pensione.');
+    li('RAL (retribuzione annua lorda) e sua crescita reale attesa: base per i contributi e per il calcolo del montante.');
+    li('Anni di contributi gia versati e montante contributivo gia accumulato: il punto di partenza.');
+    li('Aliquota contributiva IVS (33% per dipendenti privati): la quota di RAL che alimenta il montante INPS.');
+    li('Spesa mensile desiderata in pensione (in euro di oggi): l\'obiettivo rispetto a cui misurare il gap.');
+    li('Fondo pensione: versamento mensile, rendimento atteso, eventuale conferimento del TFR, e — se negoziale — contributo datoriale e quota contrattuale del lavoratore.');
+    h2('Come calcola la pensione pubblica (metodo contributivo)');
+    p('Nel sistema contributivo la pensione lorda annua = montante contributivo accumulato x coefficiente di trasformazione (legato all\'eta di pensionamento). Il montante cresce ogni anno per i nuovi contributi (aliquota IVS x RAL) e per la rivalutazione (media quinquennale del PIL nominale). Il modello usa i coefficienti di trasformazione ufficiali (range eta 57-71) e applica un declino annuo configurabile per tener conto delle revisioni biennali ISTAT (la speranza di vita che cresce abbassa progressivamente i coefficienti).');
+    li('Contributivo puro: per chi ha iniziato a lavorare dopo il 1995. Tutto a montante x coefficiente.');
+    li('Misto: per chi aveva gia anni di contributi nel 1995. Somma una quota retributiva (ante-1996) e una contributiva (post-1996).');
+    li('Retributivo: caso residuale per anzianita elevate ante-1996.');
+    h2('Tasso di sostituzione e gap previdenziale');
+    p('Il tasso di sostituzione e il rapporto tra la prima pensione e l\'ultima retribuzione: indica quanto del reddito da lavoro viene "sostituito" dalla pensione pubblica. In Italia, per i piu giovani nel sistema contributivo, tende a scendere sotto il 60-70%, lasciando un gap rispetto al tenore di vita pre-pensione. La scheda evidenzia questo gap e quanto il fondo pensione puo colmarlo.');
+    h2('Previdenza complementare e vantaggio fiscale');
+    p('I versamenti al fondo pensione sono deducibili dal reddito IRPEF fino a 5.164,57 euro l\'anno: la deduzione genera un risparmio fiscale pari all\'aliquota marginale IRPEF dell\'aderente. La scheda calcola questo risparmio e permette di scegliere come destinarlo: spenderlo, reinvestirlo nel fondo pensione stesso, o reinvestirlo nel portafoglio ETF del Simulatore. Reinvestire il risparmio fiscale e una delle leve piu potenti della previdenza integrativa.');
+    li('TFR al fondo: conferire il TFR (circa RAL/13,5 l\'anno) al fondo pensione invece di lasciarlo in azienda. La scheda confronta le due opzioni.');
+    li('Fondo negoziale: se previsto dal contratto, il datore di lavoro aggiunge un contributo (es. 1,5% della RAL) a condizione che il lavoratore versi la sua quota. E denaro aggiuntivo: la scheda lo include nel montante del fondo.');
+    li('Tassazione agevolata della rendita: i rendimenti del fondo pensione scontano un\'imposta sostitutiva ridotta e la prestazione finale ha aliquote agevolate (dal 15% che scende fino al 9% con l\'anzianita di partecipazione), contro il 26% degli investimenti ordinari.');
+    h2('Importa dal Simulatore');
+    p('Il pulsante di importazione recupera dal Simulatore il capitale ETF stimato al pensionamento e il rendimento netto del portafoglio scelto, cosi la proiezione previdenziale e coerente con il piano di accumulo impostato nelle altre schede.');
+    callout('I calcoli previdenziali sono stime basate sulla normativa vigente e su ipotesi (crescita RAL, rivalutazione montante, rendimenti, evoluzione dei coefficienti). La normativa previdenziale cambia nel tempo e i coefficienti vengono rivisti periodicamente. Le stime hanno scopo illustrativo e non sostituiscono una consulenza previdenziale qualificata (patronato, consulente previdenziale) ne le proiezioni ufficiali INPS ("La mia pensione futura").', AMBER, 'Nota importante');
 
     h1('10 — Sequence Risk, PIC e spese straordinarie');
     h2('Sequence Risk');
