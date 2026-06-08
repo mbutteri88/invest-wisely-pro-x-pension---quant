@@ -686,7 +686,7 @@ let state = {
   capeAdj: true,         // se true: baseline + scostamento da CAPE/yield live (metodo delta coerente)
 };
 let stateB = { portfolio: 'eq50', ter: .20, pac: -1 };
-let decState = { portfolio: 'eq60', strategy: 'inflation', startPortfolio: 500000, withdrawal: 20000, years: 30, inflation: 2.0, ter: .20, ecoScenario: null, ecoTiming: 'early' };
+let decState = { portfolio: 'eq60', strategy: 'inflation', startPortfolio: 500000, withdrawal: 20000, years: 30, inflation: 2.0, ter: .20, ecoScenario: null, ecoTiming: 'early', seq: { on: false, severity: 'moderate', timing: 'early', mode: 'single' } };
 let mcState = { withdrawal: 24000, years: 25, inflation: 2.0 };
 let lastMCSuccessResult = null;
 let picId = 0, expId = 0, pacChgId = 0;
@@ -749,6 +749,38 @@ function getCashWeight(port) {
 // Beta deliberatamente prudenti: migliorano il realismo (commodity e carry NON
 // sono più trattati come rifugi) senza sovrastimare il danno né creare fragilità.
 const CRASH_BETA = { commodity: 0.35, carry: 0.45, trend: -0.20 };
+
+// IRR money-weighted del piano di accumulo fino all'anno targetIdx.
+// data = array di project() con {invested, value}. Flussi: t=0 capitale iniziale,
+// ogni anno il contributo PAC di quell'anno, alla fine il valore del portafoglio.
+// Più corretto del CAGR semplice (valore/iniziale)^(1/anni), che ignora i PAC e
+// quindi sovrastima il rendimento attribuendo alla crescita anche i versamenti.
+function planIRR(data, targetIdx) {
+  if (!data || targetIdx <= 0) return 0;
+  const w0 = data[0].invested || 0;
+  const contrib = [];
+  for (let y = 1; y <= targetIdx; y++) {
+    contrib.push(Math.max(0, (data[y].invested || 0) - (data[y - 1].invested || 0)));
+  }
+  const finalValue = data[targetIdx].value || 0;
+  if (w0 <= 0 && contrib.every(c => c === 0)) return 0;
+  const npv = (r) => {
+    let v = -w0;
+    for (let y = 1; y <= targetIdx; y++) v += (-contrib[y - 1]) / Math.pow(1 + r, y);
+    v += finalValue / Math.pow(1 + r, targetIdx);
+    return v;
+  };
+  let lo = -0.9, hi = 1.0;
+  if (npv(lo) * npv(hi) >= 0) {
+    const totInv = w0 + contrib.reduce((s, c) => s + c, 0);
+    return totInv > 0 && finalValue > 0 ? Math.pow(finalValue / totInv, 1 / targetIdx) - 1 : 0;
+  }
+  for (let it = 0; it < 200; it++) {
+    const mid = (lo + hi) / 2;
+    if (npv(mid) > 0) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
 
 // Restituisce i pesi per categoria di sensibilità al crash di un portafoglio.
 // { eq, trendW, carryW, commodW, defensive } dove defensive = bond+gold+cash
@@ -2578,6 +2610,31 @@ function simulateDecumulo(sc) {
   // tassabile ad ogni prelievo (metodo del costo medio, regime amministrato ETF UCITS)
   let totalCostBasis = sP; // all'inizio il costo base = capitale importato
   const ecoWin = ecoScenario ? getEcoWindow(ecoScenario, Y, ecoTiming) : null;
+
+  // ── Sequence risk in DECUMULO ────────────────────────────────────────────────
+  // Il rischio di sequenza è il pericolo PIÙ rilevante in fase di decumulo: un crash
+  // nei primi anni, mentre si preleva, costringe a vendere quote in perdita ed erode
+  // il capitale in modo potenzialmente irreversibile (a differenza dell'accumulo, dove
+  // un crash iniziale fa comprare a sconto). Qui iniettiamo uno/più crash deterministici
+  // nell'anno scelto dal timing, usando lo stesso modello di crash beta del Simulatore
+  // (commodity/carry partecipano, trend fa crisis alpha, difensivi → rally).
+  const decSeq = decState.seq || { on: false };
+  const decCrashMap = {};
+  if (decSeq.on) {
+    const eqCRdec = (SEQ_RATES[decSeq.severity] ?? -0.35);
+    const decCrashYears = getCrashYears(decSeq.mode || 'single', decSeq.timing, Y);
+    decCrashYears.forEach((cy, idx) => {
+      const sf = idx === 0 ? 1.0 : idx === 1 ? 0.65 : 0.45;
+      const cw = getCrashWeights(port, decStartAge + cy);
+      const sev = eqCRdec * sf;
+      decCrashMap[cy] = sev * cw.eq
+        + sev * CRASH_BETA.commodity * cw.commodW
+        + sev * CRASH_BETA.carry     * cw.carryW
+        + sev * CRASH_BETA.trend     * cw.trendW
+        + BOND_RALLY_RATE            * cw.defensive;
+    });
+  }
+
   const data = [];
   for (let y = 1; y <= Y; y++) {
     if (cW <= 0) { data.push({ year: y, start: 0, ret: 0, withdrawal: 0, withdrawalNet: 0, tax: 0, end: 0, rate: 0, note: 'Portafoglio esaurito', eco: false }); continue; }
@@ -2589,6 +2646,12 @@ function simulateDecumulo(sc) {
       grossRate = getRateEco(port, ecoScenario, y, decStartAge, ecoWin) + spread;
     } else {
       grossRate = getRate(port, sc, y, decStartAge);
+    }
+    // Sovrascrive il rendimento con il crash di sequenza, se l'anno è colpito
+    let crashNote = '';
+    if (decCrashMap[y] !== undefined) {
+      grossRate = decCrashMap[y];
+      crashNote = '⚠ crash di sequenza';
     }
     const netRate = grossRate - terRate;
     // Mid-point: interessi maturano sulla media tra inizio e fine anno
@@ -2611,8 +2674,8 @@ function simulateDecumulo(sc) {
     const sellFrac = startW > 0 ? Math.min(1, wd / startW) : 0;
     totalCostBasis = Math.max(0, totalCostBasis * (1 - sellFrac));
 
-    let note = '', nextWd = wd;
-    if (inEcoRegime && y === ecoWin.s) note = ECO_SCENARIOS[ecoScenario].emoji + ' regime attivo';
+    let note = crashNote, nextWd = wd;
+    if (inEcoRegime && y === ecoWin.s) note = (note ? note + ' · ' : '') + ECO_SCENARIOS[ecoScenario].emoji + ' regime attivo';
     if (ecoWin && y === ecoWin.e + 1) note = '↩ ritorno normale';
     if (strat === 'fixed') { nextWd = wd; }
     else if (strat === 'inflation') { nextWd = wd * (1 + inflRate); if (!note && infl > 0 && y > 1) note = `+${infl.toFixed(1)}% inflaz.`; }
@@ -3350,6 +3413,45 @@ document.getElementById('decAllocBtns').onclick = e => { const b = e.target.clos
   renderDecumulo(); };
 document.getElementById('decStratBtns').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; decState.strategy = b.dataset.s; document.querySelectorAll('#decStratBtns .gbtn').forEach(x => x.classList.remove('a-blue')); b.classList.add('a-blue'); document.getElementById('decStratDesc').innerHTML = decStratDescs[b.dataset.s] || ''; renderDecumulo(); };
 
+// ── Sequence risk DECUMULO: handlers UI ──────────────────────────────────────
+function toggleDecSeq() {
+  decState.seq.on = !decState.seq.on;
+  document.getElementById('decSeqTog').classList.toggle('on', decState.seq.on);
+  document.getElementById('decSeqOpts').style.display = decState.seq.on ? 'block' : 'none';
+  updateDecSeqDesc(); renderDecumulo();
+}
+document.getElementById('decSevBtns').onclick = e => { const b = e.target.closest('[data-s]'); if (!b) return; decState.seq.severity = b.dataset.s; document.querySelectorAll('#decSevBtns .gbtn').forEach(x => x.classList.remove('a-purple')); b.classList.add('a-purple'); updateDecSeqDesc(); renderDecumulo(); };
+document.getElementById('decTimBtns').onclick = e => { const b = e.target.closest('[data-t]'); if (!b) return; decState.seq.timing = b.dataset.t; document.querySelectorAll('#decTimBtns .gbtn').forEach(x => x.classList.remove('a-amber')); b.classList.add('a-amber'); updateDecSeqDesc(); renderDecumulo(); };
+document.getElementById('decSeqModeBtns').onclick = e => { const b = e.target.closest('[data-sm]'); if (!b) return; decState.seq.mode = b.dataset.sm; document.querySelectorAll('#decSeqModeBtns .gbtn').forEach(x => x.classList.remove('a-purple')); b.classList.add('a-purple'); updateDecSeqDesc(); renderDecumulo(); };
+function updateDecSeqDesc() {
+  const el = document.getElementById('decSeqDesc');
+  if (!el || !decState.seq.on) { if (el) el.innerHTML = ''; updateDecOverlapWarning(); return; }
+  const Y = decState.years;
+  const years = getCrashYears(decState.seq.mode || 'single', decState.seq.timing, Y);
+  const sevLabel = { mild: '−20%', moderate: '−35%', severe: '−50%' }[decState.seq.severity] || '';
+  const yearsTxt = years.map((cy, i) => `Crash #${i + 1}: anno ${cy}`).join(' · ');
+  el.innerHTML = `<strong>Crash di sequenza ${sevLabel} azionario</strong> — ${yearsTxt}. ` +
+    `Un crollo nei primi anni di prelievo è molto più dannoso: si vendono quote in perdita proprio mentre il capitale dovrebbe durare. ` +
+    `Commodities e carry partecipano al crollo, il trend following attenua (crisis alpha), bond/oro/liquidità fanno da rifugio.`;
+  updateDecOverlapWarning();
+}
+
+// Avviso quando sequence risk e scenario economico sono attivi insieme.
+function updateDecOverlapWarning() {
+  const el = document.getElementById('decOverlapWarn');
+  if (!el) return;
+  const both = decState.seq && decState.seq.on && decState.ecoScenario;
+  if (both) {
+    el.style.display = 'block';
+    el.innerHTML = `⚠ <strong>Stai sovrapponendo due stress</strong>: un crash di sequenza e un regime macro (${ECO_SCENARIOS[decState.ecoScenario]?.label || decState.ecoScenario}). ` +
+      `Negli anni colpiti dal crash, il crollo prevale sul rendimento del regime; negli altri anni resta attivo il regime macro. ` +
+      `È uno scenario di stress combinato volutamente severo — utile per testare la tenuta nel caso peggiore, ma poco probabile come evento congiunto.`;
+  } else {
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+}
+
 // Eco timing — Scenari tab
 function updateEcoTimDesc() {
   const win = getEcoWindow(state.activeEcoScenario, state.years, state.ecoTiming);
@@ -3391,6 +3493,7 @@ document.getElementById('decEcoBtns').onclick = e => {
   b.classList.add('a-blue');
   document.getElementById('decEcoTimRow').style.display = decState.ecoScenario ? 'block' : 'none';
   updateDecEcoTimDesc();
+  updateDecOverlapWarning();
   renderDecumulo();
 };
 document.getElementById('decEcoTimBtns').onclick = e => {
@@ -3803,13 +3906,14 @@ async function exportExcel() {
     const txF = blendedTaxRate(endAge);
 
     const hdrProj = ['Anno','Età','Investito (€)','Valore Base (€)','Valore Ott. (€)',
-                     'Valore Pess. (€)','Guadagno Base (€)','Netto Fiscale Base (€)','CAGR Base (%)'];
+                     'Valore Pess. (€)','Guadagno Base (€)','Netto Fiscale Base (€)','Rend. annuo IRR (%)'];
     const rowsProj = dN.map((d, i) => {
       const vN = d.value, inv = d.invested;
       const vB = dB[i]?.value ?? vN, vW = dW[i]?.value ?? vN;
       const gain = Math.max(0, vN - inv);
       const netto = vN - gain * txF;
-      const cagr = i > 0 ? ((Math.pow(vN / Math.max(1, state.w), 1 / i) - 1) * 100).toFixed(2) : 0;
+      // IRR money-weighted: tiene conto del capitale iniziale E dei versamenti PAC.
+      const cagr = i > 0 ? (planIRR(dN, i) * 100).toFixed(2) : 0;
       return [d.year ?? i, d.age ?? age + i, Math.round(inv), Math.round(vN),
               Math.round(vB), Math.round(vW), Math.round(vN - inv), Math.round(netto), +cagr];
     });
@@ -5230,11 +5334,22 @@ async function generatePDF() {
       const decStratLabel = stratLabels[decState.strategy] || decState.strategy;
       const decPortMeta = getPortParams(decState.portfolio) || { label: decState.portfolio };
       sHdr('7d \u2014 Piano di Decumulo \u2014 Strategia Prelievi', [0, 150, 136]);
+      let decExtraNote = '';
+      if (decState.seq && decState.seq.on) {
+        const sevLbl = { mild: '-20%', moderate: '-35%', severe: '-50%' }[decState.seq.severity] || '';
+        const cy = getCrashYears(decState.seq.mode || 'single', decState.seq.timing, decState.years);
+        decExtraNote += ` ATTENZIONE: questa simulazione include un test di RISCHIO DI SEQUENZA (crash ${sevLbl} azionario all'anno ${cy.join(', ')}). Un crollo nei primi anni di prelievo erode il capitale in modo potenzialmente irreversibile: i risultati sotto riflettono gia questo stress.`;
+      }
+      if (decState.ecoScenario) {
+        const ecoLbl = (typeof ECO_SCENARIOS !== 'undefined' && ECO_SCENARIOS[decState.ecoScenario]) ? ECO_SCENARIOS[decState.ecoScenario].label : decState.ecoScenario;
+        decExtraNote += ` E sovrapposto un regime macroeconomico (${ecoLbl}) su una finestra di anni.`;
+      }
       narrative(
         `Simulazione della fase di prelievo post-accumulo. Capitale iniziale decumulo: ${fmtFull(decState.startPortfolio)}. ` +
         `Prelievo iniziale: ${fmtFull(decState.withdrawal)}/anno (${fmtFull(Math.round(decState.withdrawal / 12))}/mese). ` +
         `Orizzonte prelievo: ${decState.years} anni. Portafoglio in decumulo: ${decPortMeta.label}. ` +
-        `Strategia: ${decStratLabel}. TER: ${decState.ter.toFixed(2)}%/a. Inflazione: ${decState.inflation.toFixed(1)}%/a.`
+        `Strategia: ${decStratLabel}. TER: ${decState.ter.toFixed(2)}%/a. Inflazione: ${decState.inflation.toFixed(1)}%/a.` +
+        decExtraNote
       );
       const dDecBase  = simulateDecumulo('normal');
       const dDecBest  = simulateDecumulo('best');
@@ -5302,7 +5417,7 @@ async function generatePDF() {
     doc.addPage(); pN++; y = 20; miniHdr();
     sHdr('9 — Glossario dei Termini Tecnici', GRAY);
     const gloss = [
-      ['CAGR', 'Compound Annual Growth Rate. Tasso di crescita medio annuo composto, calcolato come (Vfinale/Viniziale)^(1/anni) - 1.'],
+      ['CAGR / IRR', 'Tasso di rendimento annuo del piano. Quando ci sono versamenti periodici (PAC), nella proiezione si usa l\'IRR money-weighted (tasso interno di rendimento), che tiene conto del timing dei flussi: capitale iniziale, versamenti nel tempo e valore finale. È piu corretto del semplice (Vfinale/Viniziale)^(1/anni)-1, che ignorerebbe i versamenti e sovrastimerebbe il rendimento.'],
       ['PAC', 'Piano di Accumulo del Capitale. Versamenti periodici (tipicamente mensili) di importo costante o variabile.'],
       ['PIC', 'Piano di Investimento di Capitale. Versamento una tantum di una somma definita.'],
       ['SWR (Safe Withdrawal Rate)', 'Tasso di prelievo annuo "sicuro" applicato a un capitale. La regola del 4% (Bengen, 1994) ipotizza prelievi del 4% iniziali rivalutati a inflazione su 30 anni.'],

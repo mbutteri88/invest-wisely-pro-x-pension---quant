@@ -153,7 +153,14 @@ async function downloadGuidePDF() {
     li('Fisso Nominale — prelievo costante in cifra assoluta. Semplice ma non protegge dall\'inflazione.');
     li('Indicizzato Inflazione (4% rule) — prelievo rivalutato ogni anno all\'inflazione. Il metodo classico di Bengen (1994).');
     li('Guyton-Klinger (Guard-rails) — prelievo dinamico: aumenta se il mercato va bene, si riduce in drawdown. Massimizza il prelievo medio mantenendo il capitale piu a lungo.');
-    callout('Abbassare il tasso di prelievo dal 4% al 3,5% puo ridurre drasticamente la probabilita di esaurire il capitale su 30 anni. Usa il pulsante "Importa dal Simulatore" per collegare le due fasi.', BLU, 'Come modifiche incidono');
+    h2('Rischio di sequenza in decumulo');
+    p('Il toggle "Rischio di Sequenza" inietta un crollo di mercato durante la fase di prelievo. È il rischio piu pericoloso in pensione, e diverso dall\'accumulo: un crash nei PRIMI anni di prelievo costringe a vendere quote in perdita proprio mentre il capitale dovrebbe durare, e puo esaurirlo in modo irreversibile anche se i rendimenti medi di lungo periodo restano buoni. Stesso crash, esito opposto a seconda del timing.');
+    li('Severità (lieve −20% / moderato −35% / severo −50%) e timing (inizio / metà / fine): un crash a inizio decumulo è molto piu dannoso di uno alla fine.');
+    li('Modalità 1/2/3 crash: i crash successivi al primo hanno severità ridotta (i mercati gia depressi rimbalzano prima).');
+    li('Il comportamento per categoria di asset segue il modello di crash beta del Simulatore: commodities e carry partecipano al crollo, il trend following attenua (crisis alpha), bond/oro/liquidita fanno da rifugio.');
+    li('Dialogo con le strategie: il prelievo Fisso e l\'Indicizzato subiscono passivamente (l\'Indicizzato è il piu vulnerabile, perche aumenta i prelievi proprio nel momento peggiore); Guyton-Klinger reagisce tagliando i prelievi e protegge il capitale — è il suo scopo.');
+    li('Sovrapponibile allo scenario economico: puoi combinare un crash di sequenza con un regime macro (es. stagflazione). Un avviso segnala che si tratta di uno stress combinato volutamente severo. Negli anni del crash, il crollo prevale; negli altri resta attivo il regime.');
+    callout('Abbassare il tasso di prelievo dal 4% al 3,5% puo ridurre drasticamente la probabilita di esaurire il capitale su 30 anni. Usa il pulsante "Importa dal Simulatore" per collegare le due fasi. Attiva il Rischio di Sequenza per verificare se il piano regge a un crollo nei primi anni di pensione.', BLU, 'Come modifiche incidono');
 
     h1('7 — Scheda Backtest Storico (1970-2024)');
     p('Il tab Backtest Storico applica il piano configurato nel Simulatore (portafoglio, PAC, orizzonte, TER) ai dati mensili reali 1970-2024, partendo da 10 periodi storici chiave. Risponde alla domanda: come si sarebbe comportato questo esatto piano nel passato reale?');

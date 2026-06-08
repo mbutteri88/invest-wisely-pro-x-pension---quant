@@ -1111,10 +1111,35 @@
     </div>
     <div id="decStratDesc" class="adv-desc"></div>
   </div>
+  <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.05em;font-weight:600">⚠ Rischio di Sequenza (crash in pensione)</div>
+      <div class="tog-row" onclick="toggleDecSeq()"><div class="tog" id="decSeqTog"></div><span class="tog-label" style="font-size:12.5px">Attiva Seq. Risk</span></div>
+    </div>
+    <div class="info-box" style="margin-bottom:12px">Simula un crollo di mercato durante il decumulo. È il rischio più pericoloso in pensione: un crash nei primi anni, mentre prelevi, ti costringe a vendere in perdita e può esaurire il capitale — anche se i rendimenti medi di lungo periodo sono buoni.</div>
+    <div id="decSeqOpts" style="display:none">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-bottom:12px">
+        <div><div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;font-weight:600">Severità</div>
+        <div class="btn-group" id="decSevBtns"><button class="gbtn" data-s="mild">Lieve −20%</button><button class="gbtn a-purple" data-s="moderate">Moderato −35%</button><button class="gbtn" data-s="severe">Severo −50%</button></div></div>
+        <div><div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;font-weight:600">Timing</div>
+        <div class="btn-group" id="decTimBtns"><button class="gbtn a-amber" data-t="early">Inizio</button><button class="gbtn" data-t="mid">Metà</button><button class="gbtn" data-t="late">Fine</button></div></div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;font-weight:600">Modalità Crash</div>
+        <div class="btn-group" id="decSeqModeBtns">
+          <button class="gbtn a-purple" data-sm="single">Singolo crash</button>
+          <button class="gbtn" data-sm="double">2 crash (realistico)</button>
+          <button class="gbtn" data-sm="triple">3 crash (stress test)</button>
+        </div>
+      </div>
+      <div id="decSeqDesc" class="adv-desc" style="background:var(--purple-bg);border-color:var(--purple)"></div>
+    </div>
+  </div>
 </div>
 <div class="sec">
   <div class="sec-label">🌐 Scenario Economico (opzionale)</div>
   <div class="info-box" style="margin-bottom:12px">Sovrapponi un regime macro per testare la resilienza del decumulo. Le righe viola in tabella indicano gli anni del regime attivo.</div>
+  <div id="decOverlapWarn" style="display:none;background:var(--amber-bg);border:1px solid var(--amber);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:var(--text2)"></div>
   <div class="btn-group" id="decEcoBtns" style="flex-wrap:wrap;margin-bottom:10px">
     <button class="gbtn a-blue" data-e="none">— Nessuno</button>
   </div>
