@@ -1107,7 +1107,19 @@ function blendedTaxRate(age) {
          + (obMetaW / tot) * state.taxOb / 100
          + (trendW / tot) * state.taxEq / 100;
   }
-  return (eq * state.taxEq + (1 - eq) * state.taxOb) / 100;
+  // Composizione completa: oro (ETC) e liquidità sono tassati al 26% (taxEq) in Italia,
+  // come le azioni. Solo la quota obbligazionaria (gov IT/EU) gode del 12.5% (taxOb).
+  // Allinea i preset con oro/cash (GB, Permanent, All Seasons) al ramo custom.
+  const goldW = Math.max(0, getGoldWeight(state.portfolio));
+  const cashW = Math.max(0, getCashWeight(state.portfolio));
+  const obW   = Math.max(0, 1 - eq - goldW - cashW);   // residuo = obbligazionario
+  const total = eq + goldW + cashW + obW || 1;
+  return (
+    (eq    / total) * state.taxEq / 100 +
+    (goldW / total) * state.taxEq / 100 +
+    (cashW / total) * state.taxEq / 100 +
+    (obW   / total) * state.taxOb / 100
+  );
 }
 
 function calcNetNom(g, inv, tx) {
