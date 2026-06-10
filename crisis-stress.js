@@ -358,7 +358,7 @@ function buildCrisisUI() {
 
     <!-- Nota metodologica -->
     <div style="margin-top:14px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;font-size:11.5px;color:var(--text3);line-height:1.7">
-      <strong>Metodologia:</strong> I rendimenti mensili provengono da HIST_MONTHLY (DMS Yearbook 2024, FRED, mercato internazionale oro),
+      <strong>Metodologia:</strong> I rendimenti mensili provengono da HIST_MONTHLY (ancorati a MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA in EUR),
       calibrati sulle medie annue verificate. I pesi del portafoglio sono quelli attuali del simulatore.
       TER applicato mensilmente. Capitale, PAC e stadio del piano sono quelli impostati: lo stadio scala il capitale
       esposto al crollo (a inizio piano poco, a fine piano molto), coerente con la sezione Rischio di Sequenza del Backtesting.

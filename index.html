@@ -81,6 +81,21 @@
       indipendente (fee-only, iscritto all'Albo OCF — <a href="https://www.organismoconsulenti.org" target="_blank" rel="noopener" style="color:var(--blue)">organismoconsulenti.org</a>)
       o legato a intermediari (banche, reti, SIM), purché regolarmente abilitato dalla competente autorità.
     </div>
+    <div class="footer-disclaimer" style="margin-top:10px">
+      <strong>Fonte e natura dei dati storici</strong><br>
+      I dati storici 1970&ndash;2024 utilizzati nel backtesting e nelle simulazioni Monte Carlo sono
+      <strong>a scopo illustrativo</strong>. I rendimenti annuali sono <strong>ancorati alle serie ufficiali</strong>
+      delle tre asset class &mdash; azioni <strong>MSCI World</strong> (Net Total Return, EUR), obbligazioni
+      <strong>Bloomberg Euro Aggregate</strong> e oro (prezzo in EUR, LBMA) &mdash; e ne riproducono i valori
+      di lungo periodo (CAGR, volatilità) e l'andamento dei principali anni di crisi (1973&ndash;74, 1987,
+      2000&ndash;02, 2008, 2020, 2022). La <strong>granularità mensile</strong> dei singoli mesi è una
+      <strong>ricostruzione</strong> coerente con il rendimento annuo reale, non una serie tick-by-tick certificata.
+      I dati <strong>non sono distribuiti su licenza dai fornitori degli indici</strong> e non costituiscono
+      una riproduzione ufficiale degli stessi. Per analisi che richiedano dati certificati si rimanda alle
+      fonti primarie (<a href="https://www.msci.com" target="_blank" rel="noopener" style="color:var(--blue)">MSCI</a>,
+      Bloomberg, <a href="https://www.lbma.org.uk" target="_blank" rel="noopener" style="color:var(--blue)">LBMA</a>)
+      o a strumenti basati su dati su licenza (es. <a href="https://curvo.eu" target="_blank" rel="noopener" style="color:var(--blue)">Curvo.eu</a>).
+    </div>
     <div class="footer-links">
       <button onclick="showView('privacy')" class="footer-link-btn">🔒 Privacy Policy</button>
       <button onclick="showView('cookie')" class="footer-link-btn">🍪 Cookie Policy</button>
@@ -236,7 +251,7 @@
         <li><b>t di Student (ν=4, fat tail)</b> — distribuzioni a <i>code grasse</i>: crash del −20/−40% accadono 3–5× più spesso rispetto alla gaussiana. Curtosi elevata. <b>Raccomandato per la pianificazione conservativa.</b></li>
         <li><b>GARCH(1,1) — volatility clustering</b> — la volatilità non è costante ma si autoalimenta: un mese volatile tende a essere seguito da un altro volatile. I parametri α=0,09, β=0,90 sono calibrati su equity globale. Il fan chart si allarga e restringe nel tempo invece di essere monotonicamente crescente.</li>
         <li><b>Regime-Switching (Hamilton 1989)</b> — il mercato alterna stati latenti Bull (μ=+1,2%/m, σ=3,5%) e Bear (μ=−1,8%/m, σ=7%). La matrice di transizione P(Bull→Bull)=97%, P(Bear→Bull)=20% cattura la persistenza dei trend. I crash prolungati emergono naturalmente senza impostare il Sequence Risk manualmente.</li>
-        <li><b>Block Bootstrap — Dati Storici Reali (1970–2024)</b> — campiona blocchi di rendimenti mensili reali da 660 osservazioni storiche (MSCI World, Bloomberg US Agg, Gold spot LBMA, CPI USA da FRED). I blocchi di 12 mesi preservano l'autocorrelazione seriale (volatility clustering, momentum). Non assume nessuna distribuzione parametrica: i crash storici (1973, 1987, 2000, 2008, 2022) entrano direttamente nella simulazione con la loro frequenza reale. È il modello più accurato per portafogli con componente azionaria e oro.</li>
+        <li><b>Block Bootstrap — Dati Storici Reali (1970–2024)</b> — campiona blocchi di rendimenti mensili reali da 660 osservazioni storiche (MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA in EUR; inflazione CPI USA da FRED). I blocchi di 12 mesi preservano l'autocorrelazione seriale (volatility clustering, momentum). Non assume nessuna distribuzione parametrica: i crash storici (1973, 1987, 2000, 2008, 2022) entrano direttamente nella simulazione con la loro frequenza reale. È il modello più accurato per portafogli con componente azionaria e oro.</li>
 
       </ul>
       <div class="guide-impact"><b>Come leggere i risultati:</b> confronta il P10 del Gaussiano con quello del Regime-Switching — la differenza mostra quanto la tua pianificazione dipende dall'assunzione di normalità. Il Regime-Switching e il t-Student producono code più pesanti perché modellano crash più frequenti e prolungati.</div>

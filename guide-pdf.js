@@ -176,7 +176,7 @@ async function downloadGuidePDF() {
     li('2019 — Pre-COVID: crash COVID -34% in 33 giorni, recovery completata in 6 mesi — il piu veloce crash e rimbalzo della storia.');
     li('2022 — Inflazione & rialzo tassi: azioni -20% E obbligazioni -15% insieme. Il 60/40 perde -17%: peggior anno per portafogli bilanciati dal 1937.');
     h2('Metodologia e dati');
-    li('Dati mensili reali: HIST_MONTHLY con rendimenti per asset class equity, bond, gold, cash calibrati su fonti primarie (Federal Reserve FRED, DMS Yearbook 2024, Fama-French Data Library).');
+    li('Dati mensili: HIST_MONTHLY con rendimenti per asset class equity, bond, gold ancorati anno per anno alle serie ufficiali in EUR (MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA in EUR).');
     li('CAPE-adjusted equity: i rendimenti azionari sono aggiustati per il CAPE Shiller dell\'anno di partenza tramite Earnings Yield Delta (1/CAPE). CAPE alto = rendimenti attesi piu bassi, e viceversa.');
     li('Correlazioni dinamiche: in anni con drawdown equity > 15%, le correlazioni si avvicinano alla matrice STRESS (correlazioni osservate empiricamente in crisi). Cattura il \"correlation breakdown\" dei crash.');
     li('Inflazione storica: CPI annuale reale per ogni periodo, usato per deflatare e mostrare rendimento reale.');
@@ -222,7 +222,7 @@ async function downloadGuidePDF() {
     li('2020 COVID-19 — Crash piu veloce della storia: -34% in 33 giorni (febbraio-marzo 2020). Recovery altrettanto rapida: meno di 6 mesi. Fed interviene con QE illimitato. Obbligazioni governative e oro positivi per tutto il 2020.');
     li('2022 Inflazione & Tassi — Crisi unica: azioni -20% E obbligazioni -15% simultaneamente. Il 60/40 perde -17%, peggior anno dal 1937. Fed alza i tassi da 0.25% a 4.5% in 12 mesi. Solo cash e obbligazioni a brevissima duration tengono. L\'oro risulta quasi flat (-2%).');
     h2('Dati e metodologia');
-    li('Fonte dati: HIST_MONTHLY — rendimenti mensili reali di azioni sviluppati, obbligazioni aggregate e oro dal 1970 al 2024 (DMS Yearbook 2024, Federal Reserve FRED, mercato internazionale oro). 660 osservazioni mensili verificate.');
+    li('Fonte dati: HIST_MONTHLY — rendimenti mensili di azioni sviluppate, obbligazioni e oro dal 1970 al 2024, ancorati alle serie ufficiali in EUR (MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA). 660 osservazioni mensili; totali annuali fedeli alle fonti, granularita mensile ricostruita.');
     li('Pesi portafoglio: quelli attuali del simulatore, aggiornati in tempo reale al cambio selezione. TER applicato mensilmente. Capitale, PAC e fase del piano sono quelli impostati: la fase scala il capitale esposto, coerente con la sezione Rischio di Sequenza.');
     li('Finestra: include alcuni mesi pre-crisi per contesto. Il drawdown e calcolato rispetto al picco della finestra mostrata.');
     li('Recovery: numero di mesi dal bottom per tornare al livello di inizio finestra (non al picco assoluto pre-crisi).');

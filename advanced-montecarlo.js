@@ -82,7 +82,7 @@ function sampleRegime(months) {
 
 // Rendimenti mensili storici (formato: [az_sviluppati, agg_bond, gold_spot] per ogni mese)
 // 660 righe = Gen 1970 – Dic 2024
-// Dati storici pubblici: Azioni Sviluppati TR, Obbligazioni Aggregate USA, Oro spot
+// Dati storici: MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA in EUR
 // I valori sono rendimenti semplici mensili (non log), es. 0.015 = +1.5%
 
 // ============================================================
@@ -322,7 +322,7 @@ const ADV_MODEL_DESC = {
   student: '<strong>t di Student ν=4</strong> — distribuzioni a <em>code grasse</em>: i crash del −20/−40% accadono 3-5× più spesso rispetto alla gaussiana. Curtosi elevata (≈9 per ν=4 vs 3 della normale). Raccomandato per la pianificazione conservativa. Più basso è ν, più pesanti sono le code.',
   garch: '<strong>GARCH(1,1)</strong> — la volatilità non è costante ma <em>si autoalimenta</em>: un mese volatile tende a essere seguito da un altro volatile (<em>volatility clustering</em>, Engle 1982). I parametri α=0.09, β=0.90 sono calibrati su equity globale. Il fan chart si allarga e restringe nel tempo invece di essere monotonicamente crescente.',
   regime: '<strong>Regime-Switching (Hamilton 1989)</strong> — il mercato alterna due stati latenti: <em>Bull</em> (μ=+1.2%/m, σ=3.5%) e <em>Bear</em> (μ=−1.8%/m, σ=7.0%). La matrice di transizione P(Bull→Bull)=97%, P(Bear→Bull)=20% cattura la persistenza dei trend. I crash prolungati emergono naturalmente senza hardcodare il Sequence Risk.',
-  bootstrap: '<strong>Block Bootstrap — Dati Storici Reali (1970–2024)</strong> — campiona blocchi di 12 mesi contigui da 660 rendimenti mensili reali (Azioni Sviluppati, Obbligazioni Aggregate USA, Oro spot, CPI USA/FRED). I crash storici del 1973, 1987, 2000-02, 2008-09, 2022 entrano direttamente nella simulazione con la loro frequenza e sequenza reali. Nessuna assunzione parametrica sulla distribuzione. Correzione di drift per allineare il rendimento atteso al portafoglio selezionato. <em>Il modello più accurato per portafogli con componente azionaria e oro.</em>',
+  bootstrap: '<strong>Block Bootstrap — Dati Storici Reali (1970–2024)</strong> — campiona blocchi di 12 mesi contigui da 660 rendimenti mensili (Azioni MSCI World Net EUR, Obbligazioni Euro Aggregate, Oro in EUR; inflazione CPI USA). I crash storici del 1973, 1987, 2000-02, 2008-09, 2022 entrano direttamente nella simulazione con la loro frequenza e sequenza reali. Nessuna assunzione parametrica sulla distribuzione. Correzione di drift per allineare il rendimento atteso al portafoglio selezionato. <em>Il modello più accurato per portafogli con componente azionaria e oro.</em>',
 };
 document.getElementById('advMcModelBtns').onclick = e => {
   const b = e.target.closest('[data-m]'); if (!b) return;

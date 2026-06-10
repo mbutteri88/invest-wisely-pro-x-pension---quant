@@ -1289,7 +1289,7 @@ function project(scenario, withSeq, terOverride = null, portOverride = null) {
     r -= terRate;
     const midW = w2 + (annPac + pic - exp) / 2;
     const aRG = midW * r;
-    w2 += annPac + pic - exp + aRG;
+    w2 = Math.max(0, w2 + annPac + pic - exp + aRG);   // il capitale non può andare sotto zero: un'uscita superiore al montante lo azzera
     inv += annPac + pic;
     const aRN = aRG > 0 ? aRG * (1 - txRate) : aRG;
     const evts = [];
@@ -4912,7 +4912,7 @@ async function generatePDF() {
     narrative(
       'Simulazione del percorso mensile preciso del portafoglio attuale durante le 6 principali crisi macro 1970-2024. ' +
       'A differenza del backtesting PAC (piani con versamenti), questa analisi usa uno snapshot del capitale iniziale senza contributi aggiuntivi. ' +
-      'I rendimenti mensili provengono da HIST_MONTHLY (DMS Yearbook 2024, FRED). TER applicato mensilmente. ' +
+      'I rendimenti mensili provengono da HIST_MONTHLY (ancorati a MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA in EUR). TER applicato mensilmente. ' +
       'I pesi sono quelli attuali: Az.' + Math.round(getEquityWeight(btPortKeyPDF, age)*100) + '% ' +
       'Ob.' + Math.round(Math.max(0, 1 - getEquityWeight(btPortKeyPDF,age) - getGoldWeight(btPortKeyPDF) - getCashWeight(btPortKeyPDF))*100) + '% ' +
       'Au.' + Math.round(getGoldWeight(btPortKeyPDF)*100) + '% ' +
