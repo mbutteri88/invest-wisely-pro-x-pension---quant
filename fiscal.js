@@ -26,7 +26,7 @@ const STRUMENTO_DESC = {
   etf_ucits: { label:'ETF UCITS', tipo:'Reddito di Capitale', aliq:'26% (o 12,5% su quota obblig. gov.)', compensabile:false, note:'Le plus sono reddito di capitale — non compensabili con minus da redditi diversi in regime amministrato. Il broker applica la ritenuta direttamente.' },
   etf_nonutf: { label:'ETF non-UCITS', tipo:'Reddito Diverso', aliq:'26%', compensabile:true, note:'Trattato come reddito diverso — le plus sono compensabili con minusvalenze pregresse in entrambi i regimi.' },
   azioni: { label:'Azioni dirette', tipo:'Reddito Diverso', aliq:'26%', compensabile:true, note:'Capital gain da azioni: reddito diverso, compensabile con minus. Dividendi: reddito di capitale (26%).' },
-  btp: { label:'BTP / Titoli di Stato', tipo:'Reddito di Capitale', aliq:'12.5%', compensabile:false, note:'Aliquota agevolata 12,5%. Non compensabili con minus in regime amministrato.' },
+  btp: { label:'BTP / Titoli di Stato', tipo:'Misto (cedole: capitale / plus da cessione: diversi)', aliq:'12.5%', compensabile:true, note:'Aliquota agevolata 12,5%. Le cedole sono redditi di capitale (non compensabili); le plusvalenze da cessione prima della scadenza sono redditi diversi, compensabili con minus pregresse (le minus da titoli di Stato entrano in zainetto al 48,08% del loro ammontare).' },
   obblig: { label:'Obbligaz. Corporate', tipo:'Reddito di Capitale / Diverso', aliq:'26%', compensabile:false, note:'Cedole: reddito di capitale (26%). Capital gain da vendita: reddito diverso, compensabile.' },
 };
 
@@ -157,7 +157,11 @@ function calcTaxOnSell(sellAmount, currentPrice, lots, method, regime, strumento
   let taxableGain = Math.max(0, grossGain);
 
   // Utilizzo zainetto fiscale (solo se regime dichiarativo o strumento compensabile)
-  const canUseMinus = regime === 'dichiarativo' || (regime === 'amministrato' && strDesc.compensabile);
+  // La compensabilita' dipende dalla CATEGORIA DI REDDITO dello strumento, non dal regime:
+  // plus da ETF UCITS = redditi di capitale -> MAI compensabili (in amministrato e dichiarativo);
+  // plus da cessione di azioni, ETF non-UCITS, BTP = redditi diversi -> compensabili in entrambi.
+  // Il regime cambia chi dichiara/versa e l'ampiezza pratica dello zainetto, non la categoria.
+  const canUseMinus = strDesc.compensabile;
   let minusUsed = 0;
   const currentYearN = currentYear || 2025;
   const validMinus = minusvalenze.filter(m => m.scadenza >= currentYearN && m.amount > 0);

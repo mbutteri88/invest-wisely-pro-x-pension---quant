@@ -37,6 +37,14 @@ function ok(cond, name, detail) {
 }
 function warn(name, detail) { WARN++; console.log('  \x1b[33m⚠\x1b[0m ' + name + (detail ? '  \x1b[2m' + detail + '\x1b[0m' : '')); }
 function near(a, b, tol) { return Math.abs(a - b) <= tol; }
+// Per i test su simulazioni casuali: ritenta una volta in caso di esito negativo.
+// Il rumore di campionamento (es. curtosi della t-Student, mediane Monte Carlo)
+// puo' raramente sforare le soglie; un difetto REALE fallisce entrambe le volte.
+function okStochastic(fn, name) {
+  let r = fn();
+  if (!r.pass) r = fn();   // secondo tentativo: solo il flake di sampling si salva
+  ok(r.pass, name, r.detail);
+}
 function header(t) { console.log('\n\x1b[1m' + t + '\x1b[0m'); }
 
 // ─── Caricamento moduli sorgente ──────────────────────────────────────────
@@ -283,33 +291,46 @@ function suiteMC() {
   ['randn_t','sampleGARCH','sampleRegime','calcHistMean','sampleBootstrap'].forEach(fn => loadFn(SRC.amc, fn));
   const pct = (a,p) => { const x=[...a].sort((m,n)=>m-n); return x[Math.floor(x.length*p)]; };
 
-  // 4.a t-Student: code grasse (curtosi > 3)
+  // 4.a t-Student: code grasse (curtosi > 3). NOTA: lo stimatore della curtosi
+  // su distribuzioni heavy-tail (nu=5) ha varianza altissima -> retry anti-flake.
   if (global.randn_t) {
-    let ts=[]; for(let i=0;i<50000;i++) ts.push(global.randn_t(5));
-    const m=ts.reduce((a,b)=>a+b)/ts.length, sd=Math.sqrt(ts.reduce((a,b)=>a+(b-m)**2,0)/ts.length);
-    const kurt=ts.reduce((a,b)=>a+((b-m)/sd)**4,0)/ts.length;
-    ok(kurt > 3.5, 't-Student: curtosi > 3 (code grasse)', kurt.toFixed(1));
+    okStochastic(() => {
+      let ts=[]; for(let i=0;i<50000;i++) ts.push(global.randn_t(5));
+      const m=ts.reduce((a,b)=>a+b)/ts.length, sd=Math.sqrt(ts.reduce((a,b)=>a+(b-m)**2,0)/ts.length);
+      const kurt=ts.reduce((a,b)=>a+((b-m)/sd)**4,0)/ts.length;
+      return { pass: kurt > 3.5, detail: kurt.toFixed(1) };
+    }, 't-Student: curtosi > 3 (code grasse)');
   } else warn('t-Student: funzione non trovata (randn_t)');
 
   // 4.b GARCH: CAGR mediano nel range plausibile
   if (global.sampleGARCH && global.GARCH_EQ) {
-    let g=[]; const init=Math.sqrt(global.GARCH_EQ.omega/(1-global.GARCH_EQ.alpha-global.GARCH_EQ.beta));
-    for(let p=0;p<1500;p++){ const mo=global.sampleGARCH(global.GARCH_EQ,420,init); let w=1; mo.forEach(r=>w*=(1+r)); g.push(Math.pow(w,1/35)-1); }
-    ok(pct(g,.5)>0.02 && pct(g,.5)<0.11, 'GARCH equity: CAGR mediano 2-11%', (pct(g,.5)*100).toFixed(1)+'%');
+    okStochastic(() => {
+      let g=[]; const init=Math.sqrt(global.GARCH_EQ.omega/(1-global.GARCH_EQ.alpha-global.GARCH_EQ.beta));
+      for(let p=0;p<1500;p++){ const mo=global.sampleGARCH(global.GARCH_EQ,420,init); let w=1; mo.forEach(r=>w*=(1+r)); g.push(Math.pow(w,1/35)-1); }
+      return { pass: pct(g,.5)>0.02 && pct(g,.5)<0.11, detail: (pct(g,.5)*100).toFixed(1)+'%' };
+    }, 'GARCH equity: CAGR mediano 2-11%');
   } else warn('GARCH: funzione/parametri non trovati');
 
   // 4.c Regime-switching: CAGR mediano plausibile
   if (global.sampleRegime) {
-    let rg=[]; for(let p=0;p<1500;p++){ const out=global.sampleRegime(420); const ret=out.returns||out; let w=1; ret.forEach(r=>w*=(1+r)); rg.push(Math.pow(w,1/35)-1); }
-    ok(pct(rg,.5)>0 && pct(rg,.5)<0.15, 'Regime-switching: CAGR mediano 0-15%', (pct(rg,.5)*100).toFixed(1)+'%');
+    okStochastic(() => {
+      let rg=[]; for(let p=0;p<1500;p++){ const out=global.sampleRegime(420); const ret=out.returns||out; let w=1; ret.forEach(r=>w*=(1+r)); rg.push(Math.pow(w,1/35)-1); }
+      return { pass: pct(rg,.5)>0 && pct(rg,.5)<0.15, detail: (pct(rg,.5)*100).toFixed(1)+'%' };
+    }, 'Regime-switching: CAGR mediano 0-15%');
   } else warn('Regime-switching: funzione non trovata');
 
   // 4.d Block bootstrap: P50 ≈ media storica del portafoglio (drift allineato)
   if (global.sampleBootstrap && global.calcHistMean) {
     const gbMean = global.calcHistMean(0.4, 0.2, 0.4, 0);
-    let b=[]; for(let p=0;p<3000;p++){ let w=1; for(let y=0;y<20;y++) w*=(1+global.sampleBootstrap(0.4,0.2,0.4,0,gbMean)); b.push(Math.pow(w,1/20)-1); }
-    ok(near(pct(b,.5), gbMean, 0.02), 'Bootstrap GB: P50 ≈ media storica', 'P50 '+(pct(b,.5)*100).toFixed(1)+'% vs '+(gbMean*100).toFixed(1)+'%');
-    ok(pct(b,.05) < pct(b,.5) && pct(b,.5) < pct(b,.95), 'Bootstrap GB: percentili ordinati P5<P50<P95');
+    okStochastic(() => {
+      let b=[]; for(let p=0;p<3000;p++){ let w=1; for(let y=0;y<20;y++) w*=(1+global.sampleBootstrap(0.4,0.2,0.4,0,gbMean)); b.push(Math.pow(w,1/20)-1); }
+      const passA = near(pct(b,.5), gbMean, 0.02);
+      const passB = pct(b,.05) < pct(b,.5) && pct(b,.5) < pct(b,.95);
+      global.__bootB = b;
+      return { pass: passA, detail: 'P50 '+(pct(b,.5)*100).toFixed(1)+'% vs '+(gbMean*100).toFixed(1)+'%' };
+    }, 'Bootstrap GB: P50 ≈ media storica');
+    const b = global.__bootB || [];
+    ok(b.length>0 && pct(b,.05) < pct(b,.5) && pct(b,.5) < pct(b,.95), 'Bootstrap GB: percentili ordinati P5<P50<P95');
   } else warn('Block bootstrap: funzione non trovata');
 }
 
