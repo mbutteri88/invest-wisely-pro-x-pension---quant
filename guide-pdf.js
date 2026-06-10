@@ -254,7 +254,7 @@ async function downloadGuidePDF() {
     h2('Imposta di bollo');
     p('Pari allo 0,20% annuo sul valore del dossier titoli. A 30 anni puo erodere il 4-6% del capitale complessivo.');
     h2('Tassazione differenziata per tipo di asset');
-    p('Nei portafogli Custom l\'aliquota sul capital gain dipende dalla natura dello strumento: le obbligazioni governative (e titoli di Stato di paesi white list) scontano il 12,5%, mentre azioni, ETF, trend following / managed futures, carry, commodities e fattori scontano il 26% (redditi diversi). L\'aliquota complessiva del portafoglio e la media pesata sui pesi degli asset.');
+    p('In tutti i portafogli (preset e Custom) l\'aliquota sul capital gain dipende dalla natura dello strumento: le obbligazioni governative (e titoli di Stato di paesi white list) scontano il 12,5%, mentre azioni, ETF, oro (ETC), liquidita, trend following / managed futures, carry, commodities e fattori scontano il 26% (redditi diversi). L\'aliquota complessiva del portafoglio e la media pesata sui pesi degli asset.');
     callout('Un portafoglio con managed futures, commodities o carry ha un\'aliquota effettiva piu alta di un classico azioni-obbligazioni governative, perche questi strumenti sono tassati al 26% e non al 12,5%. Il simulatore ne tiene conto nel calcolo del rendimento netto.', BLU, 'Aliquota effettiva');
     h2('Zainetto fiscale');
     p('Inserisci le minusvalenze pregresse (scadono dopo 4 anni) per stimare il risparmio fiscale residuo. In regime dichiarativo si compensano tutte le plusvalenze; in amministrato solo i redditi diversi (non ETF armonizzati).');

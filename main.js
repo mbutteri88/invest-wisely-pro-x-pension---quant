@@ -3959,7 +3959,7 @@ async function exportExcel() {
     let wsCustom = null;
     if (portfolio === 'custom' && state.customPortfolio?.slots?.length) {
       const hdrAC = ['Asset Class', 'Peso (%)', 'Rendimento μ (%/a)',
-                     'Volatilità σ (%/a)', 'Beta Inflazione', 'Categoria', 'Fonte'];
+                     'Volatilità σ (%/a)', 'Beta Inflazione', 'Categoria', 'Fonte (indicativa)'];
       const total = state.customPortfolio.slots.reduce((s,sl)=>s+(+sl.pct||0),0)||1;
       const rowsAC = state.customPortfolio.slots.filter(s=>s.ac&&s.pct>0).map(sl => {
         const ac = ASSET_CLASSES[sl.ac] || {};
@@ -4479,7 +4479,7 @@ async function generatePDF() {
       '5b. A/B Confronto Portafogli',
       '6.  Scenari Economici Multi-Regime',
       '7.  Sequence of Returns Risk',
-      '7b. Backtesting Storico — Dati Reali 1970-2024',
+      '7b. Backtesting Storico — Dati Storici 1970-2024',
       '7c. Sequence Risk Multiplo — Crash Singolo / Doppio / Triplo',
       '7d. Stress Test Macro Storici — Path Mensile Esatto (6 crisi)',
       '7e. Piano di Decumulo (Strategia Prelievi)',
@@ -4549,7 +4549,7 @@ async function generatePDF() {
       'Le proiezioni utilizzano un modello deterministico annuale per gli scenari base/ottimista/pessimista, applicando un rendimento atteso ' +
       'specifico per portafoglio e una formula "mid-year convention" per i versamenti PAC (versamenti distribuiti uniformemente nell\'anno). ' +
       'Il TER viene sottratto dal rendimento lordo. La fiscalita e applicata solo sulla quota di plusvalenza al disinvestimento, con aliquota ' +
-      'composita pesata sulla composizione azioni/obbligazioni del portafoglio finale.'
+      'composita pesata sulla composizione del portafoglio: azioni, oro (ETC) e liquidita al 26%, obbligazioni governative al 12,5%.'
     );
     narrative(
       'Lo scenario Monte Carlo usa un approccio Gaussiano standard (1.000 simulazioni) con μ = rendimento atteso del portafoglio e σ = volatilità storica. ' +
@@ -4800,9 +4800,9 @@ async function generatePDF() {
 
     // ─────────── 7b. BACKTESTING STORICO ───────────
     doc.addPage(); pN++; y = 20; miniHdr();
-    sHdr('7b — Backtesting Storico — Dati Reali 1970-2024', [0, 150, 167]);
+    sHdr('7b — Backtesting Storico — Dati Storici 1970-2024', [0, 150, 167]);
     narrative(
-      'Il backtesting usa i rendimenti mensili effettivi (non simulati) di azioni sviluppati, obbligazioni aggregate e oro per il periodo 1970-2024 (660 osservazioni). ' +
+      'Il backtesting usa 660 rendimenti mensili storici 1970-2024, ancorati anno per anno alle serie ufficiali in EUR (azioni MSCI World Net EUR, obbligazioni Euro Aggregate, oro LBMA); la granularita mensile e una ricostruzione coerente con il totale annuo reale. ' +
       'Il portafoglio e il PAC mensile attuali del simulatore vengono applicati a 10 periodi storici diversi, includendo le correlazioni dinamiche: ' +
       'in anni di drawdown azionario > 15% le correlazioni tra asset class si alzano verso la matrice di stress, come osservato empiricamente. ' +
       'Il CAGR nominale include dividendi e cedole (total return). Le ultime osservazioni disponibili coprono fino a dicembre 2024.'
@@ -5555,7 +5555,8 @@ async function generatePDF() {
       '(eventi estremi piu frequenti). (2) Le correlazioni fra asset class sono assunte stabili, ma in periodi di stress tendono a convergere a 1. ' +
       '(3) La fiscalita e modellata in modo semplificato: non include imposta di bollo, eventuali aliquote estere, o regimi previdenziali specifici. ' +
       '(4) L\'inflazione e applicata in modo uniforme; la realta puo includere shock localizzati su specifiche categorie di spesa. ' +
-      '(5) I costi di ribilanciamento, spread e commissioni di trading non sono inclusi.'
+      '(5) I costi di ribilanciamento, spread e commissioni di trading non sono inclusi. ' +
+      '(6) I dati storici 1970-2024 hanno totali annuali ancorati alle serie ufficiali in EUR (MSCI World Net EUR, Bloomberg Euro Aggregate, oro LBMA), ma la granularita mensile e una ricostruzione illustrativa, non una serie certificata dai fornitori degli indici.'
     );
     const discFull = doc.splitTextToSize(
       'AVVERTENZA IMPORTANTE — Questo report ha finalita esclusivamente educative e informative. Non costituisce consulenza finanziaria, di investimento, fiscale o legale, ne sollecitazione all\'acquisto/vendita di strumenti finanziari. I rendimenti, le proiezioni e le simulazioni sono ipotetici e basati su assunzioni semplificate: NON rappresentano una garanzia di risultati futuri. I rendimenti passati non sono indicativi di quelli futuri. Gli investimenti comportano rischi, inclusa la perdita totale o parziale del capitale. Prima di investire, consultare un consulente finanziario indipendente abilitato (in Italia: iscritto all\'albo OCF) e leggere attentamente i KIID/KID degli strumenti considerati. L\'autore e i fornitori del software declinano ogni responsabilita per decisioni assunte sulla base del presente documento.',
